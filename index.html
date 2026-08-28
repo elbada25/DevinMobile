@@ -7,352 +7,523 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Devin Mobile</title>
 <style>
-  :root {
-    --bg: #0d1117;
-    --card: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --green: #3fb950;
-    --yellow: #d29922;
-    --red: #f85149;
-    --blue: #58a6ff;
-    --accent: #1f6feb;
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body {
-    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: var(--bg); color: var(--text); font-size: 15px;
-    padding-bottom: 80px;
-  }
-  header {
-    position: sticky; top: 0; z-index: 10;
-    background: var(--card); border-bottom: 1px solid var(--border);
-    padding: 12px 16px; display: flex; align-items: center; gap: 10px;
-  }
-  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
-  header .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-  header .refresh {
-    margin-left: auto; background: none; border: 1px solid var(--border);
-    color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer;
-  }
-  header .refresh:active { background: var(--border); }
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--accent:#1f6feb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:15px;height:100vh;overflow:hidden}
+#app{height:100vh;display:flex;flex-direction:column}
 
-  .session {
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    margin: 10px 12px; padding: 14px; cursor: pointer; transition: border-color .15s;
-  }
-  .session:active { border-color: var(--accent); }
-  .session-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .status-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .status-dot.idle { background: var(--muted); }
-  .session-title { font-size: 14px; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .session-meta { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
-  .session-id { font-family: monospace; font-size: 11px; color: var(--muted); }
-  .badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
-  .badge.active { background: rgba(63,185,80,.15); color: var(--green); }
-  .badge.idle { background: rgba(139,148,158,.15); color: var(--muted); }
+/* Login */
+#login{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+#login h1{font-size:24px;margin:0 0 6px}
+#login p{color:var(--muted);font-size:13px;margin:0 0 20px;text-align:center}
+#login input{width:100%;max-width:320px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:14px;outline:none;margin-bottom:10px}
+#login input:focus{border-color:var(--accent)}
+#login button{width:100%;max-width:320px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:500;cursor:pointer}
+#login .err{color:var(--red);font-size:12px;margin-top:8px;min-height:16px}
 
-  .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+/* Header */
+.header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.header h1{font-size:16px;margin:0;font-weight:600}
+.header .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.header .btn{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer}
+.header .btn:active{background:var(--border)}
+.header .spacer{flex:1}
 
-  /* Modal de prompt */
-  .overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50;
-    display: none; align-items: flex-end; justify-content: center;
-  }
-  .overlay.show { display: flex; }
-  .modal {
-    background: var(--card); border: 1px solid var(--border); border-radius: 14px 14px 0 0;
-    width: 100%; max-width: 600px; padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom));
-  }
-  .modal h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
-  .modal .sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; font-family: monospace; }
-  .modal textarea {
-    width: 100%; min-height: 80px; background: var(--bg); color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 14px;
-    font-family: inherit; resize: vertical; outline: none;
-  }
-  .modal textarea:focus { border-color: var(--accent); }
-  .modal-actions { display: flex; gap: 8px; margin-top: 10px; }
-  .btn {
-    border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 500; cursor: pointer;
-  }
-  .btn-send { background: var(--accent); color: #fff; flex: 1; }
-  .btn-send:active { background: #388bfd; }
-  .btn-send:disabled { opacity: .5; }
-  .btn-cancel { background: var(--border); color: var(--text); }
-  .btn-cancel:active { background: #3d4449; }
+/* Session list view */
+.view-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.session{background:var(--card);border:1px solid var(--border);border-radius:10px;margin:8px 10px;padding:12px 14px;cursor:pointer;transition:border-color .15s}
+.session:active{border-color:var(--accent)}
+.session-row{display:flex;align-items:center;gap:8px}
+.s-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.s-dot.active{background:var(--green);box-shadow:0 0 6px var(--green)}
+.s-dot.idle{background:var(--muted)}
+.s-title{font-size:14px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s-badge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:500}
+.s-badge.active{background:rgba(63,185,80,.15);color:var(--green)}
+.s-badge.idle{background:rgba(139,148,158,.15);color:var(--muted)}
+.s-meta{font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+.s-actions{display:flex;gap:6px;margin-top:8px}
+.s-actions button{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
+.s-actions button:active{background:var(--border)}
+.s-actions button.danger{color:var(--red);border-color:rgba(241,81,73,.3)}
 
-  .response {
-    margin-top: 12px; background: var(--bg); border: 1px solid var(--border);
-    border-radius: 8px; padding: 10px; font-size: 13px; white-space: pre-wrap; word-break: break-word;
-    max-height: 300px; overflow-y: auto; display: none;
-  }
-  .response.show { display: block; }
-  .response.error { border-color: var(--red); color: var(--red); }
+/* Chat view */
+.view-chat{flex:1;display:none;flex-direction:column;overflow:hidden}
+.view-chat.show{display:flex}
+.chat-header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.chat-header .back{background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px}
+.chat-header .info{flex:1;overflow:hidden}
+.chat-header .info .t{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-header .info .s{font-size:11px;color:var(--muted);font-family:monospace}
+.chat-header .release-btn{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--yellow);background:rgba(210,153,34,.1);color:var(--yellow);cursor:pointer}
 
-  /* Historial de mensajes */
-  .history {
-    margin-top: 8px; max-height: 250px; overflow-y: auto; display: none;
-  }
-  .history.show { display: block; }
-  .hist-msg { margin-bottom: 8px; padding: 8px 10px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
-  .hist-msg.user { background: rgba(31,111,235,.12); border-left: 3px solid var(--accent); }
-  .hist-msg.assistant { background: rgba(63,185,80,.08); border-left: 3px solid var(--green); }
-  .hist-msg .role { font-size: 11px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; }
-  .hist-loading { color: var(--muted); text-align: center; padding: 20px; }
-  .spinner {
-    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--muted);
-    border-top-color: var(--text); border-radius: 50%; animation: spin .8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+.chat-msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 14px}
+.msg{margin-bottom:12px;max-width:100%}
+.msg.user .bubble{background:rgba(31,111,235,.12);border-left:3px solid var(--accent);border-radius:0 10px 10px 0}
+.msg.assistant .bubble{background:rgba(63,185,80,.06);border-left:3px solid var(--green);border-radius:0 10px 10px 0}
+.msg.tool .bubble{background:rgba(139,148,158,.08);border-left:3px solid var(--muted);border-radius:0 10px 10px 0}
+.msg .bubble{padding:8px 12px;font-size:13px;white-space:pre-wrap;word-break:break-word;border-radius:8px}
+.msg .role{font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px}
+.msg .time{float:right;font-size:10px;color:var(--muted);margin-left:8px}
+.msg .thinking{font-size:12px;color:var(--muted);font-style:italic;margin-top:6px;padding:6px 8px;background:rgba(139,148,158,.06);border-radius:6px;white-space:pre-wrap}
+.msg .tool-call{font-size:12px;margin-top:6px;padding:6px 8px;background:rgba(139,148,158,.06);border-radius:6px}
+.msg .tool-call .tc-title{font-weight:500;color:var(--blue)}
+.msg .tool-call .tc-status{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:6px}
+.msg .tool-call .tc-status.completed{background:rgba(63,185,80,.15);color:var(--green)}
+.msg .tool-call .tc-status.failed{background:rgba(241,81,73,.15);color:var(--red)}
+.msg .tool-call .tc-status.in_progress{background:rgba(88,166,255,.15);color:var(--blue)}
+.msg .tool-call .tc-result{margin-top:4px;color:var(--muted);font-family:monospace;font-size:11px;white-space:pre-wrap;max-height:150px;overflow-y:auto}
 
-  /* Login */
-  #login {
-    position: fixed; inset: 0; background: var(--bg); z-index: 100;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
-  }
-  #login h1 { font-size: 22px; margin: 0 0 6px; }
-  #login p { color: var(--muted); font-size: 13px; margin: 0 0 20px; text-align: center; }
-  #login input {
-    width: 100%; max-width: 320px; background: var(--card); color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 14px; outline: none;
-    margin-bottom: 12px;
-  }
-  #login input:focus { border-color: var(--accent); }
-  #login button {
-    width: 100%; max-width: 320px; background: var(--accent); color: #fff; border: none;
-    border-radius: 8px; padding: 12px; font-size: 15px; font-weight: 500; cursor: pointer;
-  }
-  #login .err { color: var(--red); font-size: 12px; margin-top: 8px; min-height: 16px; }
+/* Streaming indicator */
+.streaming-indicator{display:none;padding:8px 14px;font-size:12px;color:var(--muted);background:var(--card);border-top:1px solid var(--border)}
+.streaming-indicator.show{display:flex;align-items:center;gap:6px}
+.streaming-indicator .spinner{width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Input area */
+.chat-input{background:var(--card);border-top:1px solid var(--border);padding:10px 14px;display:flex;gap:8px;flex-shrink:0;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.chat-input textarea{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;font-family:inherit;resize:none;outline:none;min-height:40px;max-height:120px}
+.chat-input textarea:focus{border-color:var(--accent)}
+.chat-input button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;align-self:flex-end}
+.chat-input button:disabled{opacity:.4}
+
+/* New session FAB */
+.fab{position:fixed;bottom:20px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:10;display:flex;align-items:center;justify-content:center}
+
+/* Empty states */
+.empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:400px;padding:16px}
+.modal h3{margin:0 0 12px;font-size:16px}
+.modal input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;outline:none;margin-bottom:10px}
+.modal input:focus{border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px}
+.modal-actions button{flex:1;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer}
+.modal-actions .cancel{background:var(--border);color:var(--text)}
+.modal-actions .ok{background:var(--accent);color:#fff}
 </style>
 </head>
 <body>
+<div id="app">
 
 <div id="login">
   <h1>Devin Mobile</h1>
-  <p>Introduce tu usuario y contraseña</p>
+  <p>Introduce tu usuario y contrasena</p>
   <input id="userInput" type="text" placeholder="Usuario" autocomplete="off">
-  <input id="passInput" type="password" placeholder="Contraseña" autocomplete="off">
+  <input id="passInput" type="password" placeholder="Contrasena" autocomplete="off">
   <button id="loginBtn">Entrar</button>
   <div class="err" id="loginErr"></div>
 </div>
 
-<header style="display:none" id="appHeader">
+<!-- Lista de sesiones -->
+<div class="header" id="listHeader" style="display:none">
   <span class="dot"></span>
   <h1>Devin Mobile</h1>
-  <button class="refresh" id="refreshBtn">Actualizar</button>
-</header>
+  <div class="spacer"></div>
+  <button class="btn" id="archivedBtn">Archivadas</button>
+  <button class="btn" id="refreshBtn">Actualizar</button>
+</div>
+<div class="view-list" id="sessionListView" style="display:none">
+  <div id="sessionList"></div>
+</div>
+<button class="fab" id="newSessionFab" style="display:none">+</button>
 
-<div id="sessionList"></div>
-
-<div class="overlay" id="overlay">
-  <div class="modal">
-    <h2 id="modalTitle">Enviar prompt</h2>
-    <div class="sub" id="modalSessionId"></div>
-    <div class="history" id="historyBox">
-      <div class="hist-loading">Cargando historial...</div>
+<!-- Vista de chat -->
+<div class="view-chat" id="chatView">
+  <div class="chat-header">
+    <button class="back" id="backBtn">&larr;</button>
+    <div class="info">
+      <div class="t" id="chatTitle"></div>
+      <div class="s" id="chatSessionId"></div>
     </div>
-    <textarea id="promptText" placeholder="Escribe tu prompt..." style="margin-top:10px"></textarea>
-    <div class="modal-actions">
-      <button class="btn btn-cancel" id="cancelBtn">Cancelar</button>
-      <button class="btn btn-send" id="releaseBtn" style="background:var(--yellow);color:#000">Liberar</button>
-      <button class="btn btn-send" id="sendBtn">Enviar</button>
-    </div>
-    <div class="response" id="responseBox"></div>
+    <button class="release-btn" id="chatReleaseBtn">Liberar</button>
+  </div>
+  <div class="chat-msgs" id="chatMsgs"></div>
+  <div class="streaming-indicator" id="streamingIndicator">
+    <div class="spinner"></div>
+    <span id="streamingText">Devin esta trabajando...</span>
+  </div>
+  <div class="chat-input">
+    <textarea id="chatInput" placeholder="Escribe un mensaje..." rows="1"></textarea>
+    <button id="chatSendBtn">Enviar</button>
   </div>
 </div>
 
+<!-- Modal generico -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Titulo</h3>
+    <input id="modalInput" type="text">
+    <div class="modal-actions">
+      <button class="cancel" id="modalCancel">Cancelar</button>
+      <button class="ok" id="modalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
 <script>
-const CRED_KEY = 'devin_mobile_cred';
-let credB64 = localStorage.getItem(CRED_KEY) || '';
-let currentSessionId = null;
+const CRED_KEY='devin_mobile_cred';
+let credB64=localStorage.getItem(CRED_KEY)||'';
+let currentSessionId=null;
+let currentSessionTitle='';
+let isStreaming=false;
+let refreshTimer=null;
+let archivedMode=false;
 
-const $ = id => document.getElementById(id);
+const $=id=>document.getElementById(id);
 
-function authHeaders() {
-  const h = { 'Content-Type': 'application/json' };
-  if (credB64) h['Authorization'] = 'Basic ' + credB64;
+function authHeaders(){
+  const h={'Content-Type':'application/json'};
+  if(credB64)h['Authorization']='Basic '+credB64;
   return h;
 }
 
-async function checkAuth() {
-  if (!credB64) { showLogin(); return; }
-  try {
-    const r = await fetch('/api/health', { headers: authHeaders() });
-    if (!r.ok) throw new Error();
-    hideLogin();
-    loadSessions();
-  } catch {
-    showLogin();
-  }
+// --- Auth ---
+async function checkAuth(){
+  if(!credB64){showLogin();return;}
+  try{
+    const r=await fetch('/api/health',{headers:authHeaders()});
+    if(!r.ok)throw new Error();
+    hideLogin();showListView();
+  }catch{showLogin();}
 }
+function showLogin(){$('login').style.display='flex';$('listHeader').style.display='none';$('sessionListView').style.display='none';$('newSessionFab').style.display='none';}
+function hideLogin(){$('login').style.display='none';}
 
-function showLogin() {
-  $('login').style.display = 'flex';
-  $('appHeader').style.display = 'none';
-  $('sessionList').innerHTML = '';
-}
-function hideLogin() {
-  $('login').style.display = 'none';
-  $('appHeader').style.display = 'flex';
-}
-
-$('loginBtn').addEventListener('click', async () => {
-  const user = $('userInput').value.trim();
-  const pwd = $('passInput').value;
-  if (!user || !pwd) { $('loginErr').textContent = 'Introduce usuario y contraseña'; return; }
-  $('loginErr').textContent = '';
-  $('loginBtn').disabled = true;
-  $('loginBtn').textContent = '...';
-  try {
-    const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: user, password: pwd }),
-    });
-    if (r.ok) {
-      credB64 = btoa(user + ':' + pwd);
-      localStorage.setItem(CRED_KEY, credB64);
-      hideLogin();
-      loadSessions();
-    } else {
-      $('loginErr').textContent = 'Usuario o contraseña incorrectos';
-    }
-  } catch (e) {
-    $('loginErr').textContent = 'Error de conexion';
-  }
-  $('loginBtn').disabled = false;
-  $('loginBtn').textContent = 'Entrar';
+$('loginBtn').addEventListener('click',async()=>{
+  const u=$('userInput').value.trim(),p=$('passInput').value;
+  if(!u||!p){$('loginErr').textContent='Introduce usuario y contrasena';return;}
+  $('loginErr').textContent='';$('loginBtn').disabled=true;
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if(r.ok){credB64=btoa(u+':'+p);localStorage.setItem(CRED_KEY,credB64);hideLogin();showListView();}
+    else $('loginErr').textContent='Usuario o contrasena incorrectos';
+  }catch(e){$('loginErr').textContent='Error de conexion';}
+  $('loginBtn').disabled=false;
 });
-$('passInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
-$('userInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('passInput').focus(); });
+$('passInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click();});
+$('userInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('passInput').focus();});
 
-async function loadSessions() {
-  const list = $('sessionList');
-  list.innerHTML = '<div class="empty">Cargando sesiones...</div>';
-  try {
-    const r = await fetch('/api/sessions', { headers: authHeaders() });
-    if (!r.ok) { if (r.status === 401) { showLogin(); return; } throw new Error(); }
-    const sessions = await r.json();
-    if (!sessions.length) { list.innerHTML = '<div class="empty">No hay sesiones</div>'; return; }
-    list.innerHTML = sessions.map(s => {
-      const cls = s.active ? 'active' : 'idle';
-      const label = s.active ? 'Activa' : 'Inactiva';
-      const title = escapeHtml(s.title || '(sin titulo)');
-      const ago = escapeHtml(s.last_activity_ago || '');
-      const iso = escapeHtml(s.last_activity_iso || '');
-      const dir = escapeHtml(s.working_directory_display || s.working_directory || '');
-      return `<div class="session" onclick="openPrompt('${s.id}')">
-        <div class="session-header">
-          <span class="status-dot ${cls}"></span>
-          <span class="session-title">${title}</span>
-          <span class="badge ${cls}">${label}</span>
+// --- List view ---
+function showListView(){
+  $('listHeader').style.display='flex';
+  $('sessionListView').style.display='block';
+  $('newSessionFab').style.display='flex';
+  $('chatView').classList.remove('show');
+  loadSessions();
+  if(refreshTimer)clearInterval(refreshTimer);
+  refreshTimer=setInterval(loadSessions,10000); // refresh suave cada 10s
+}
+
+async function loadSessions(){
+  try{
+    const url=archivedMode?'/api/sessions/archived':'/api/sessions';
+    const r=await fetch(url,{headers:authHeaders()});
+    if(!r.ok){if(r.status===401){showLogin();return;}throw new Error();}
+    const sessions=await r.json();
+    const list=$('sessionList');
+    if(!sessions.length){list.innerHTML='<div class="empty">No hay sesiones</div>';return;}
+    list.innerHTML=sessions.map(s=>{
+      const cls=s.active?'active':'idle';
+      const label=s.active?'Activa':'Inactiva';
+      const title=esc(s.title||'(sin titulo)');
+      const ago=esc(s.last_activity_ago||'');
+      const model=esc(s.model||'');
+      const dir=esc((s.working_directory||'').replace('C:\\Users\\EduardoBadaRuano','~'));
+      const actions=archivedMode?`
+        <div class="s-actions">
+          <button onclick="unarchiveSession('${s.id}')">Desarchivar</button>
+        </div>`:`
+        <div class="s-actions">
+          <button onclick="renameSession('${s.id}','${esc(s.title||'').replace(/'/g,"\\'")}')">Renombrar</button>
+          <button onclick="archiveSession('${s.id}')" class="danger">Archivar</button>
+        </div>`;
+      return `<div class="session" onclick="openChat('${s.id}','${esc(s.title||'').replace(/'/g,"\\'")}')">
+        <div class="session-row">
+          <span class="s-dot ${cls}"></span>
+          <span class="s-title">${title}</span>
+          <span class="s-badge ${cls}">${label}</span>
         </div>
-        <div class="session-meta">
-          <span>${ago}</span>
-          <span class="session-id">${s.id}</span>
-        </div>
-        <div class="session-meta"><span>${dir}</span></div>
+        <div class="s-meta"><span>${ago}</span><span>${model}</span><span>${dir}</span></div>
+        ${actions}
       </div>`;
     }).join('');
-  } catch (e) {
-    list.innerHTML = '<div class="empty">Error al cargar sesiones</div>';
-  }
+  }catch(e){$('sessionList').innerHTML='<div class="empty">Error al cargar</div>';}
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+$('refreshBtn').addEventListener('click',loadSessions);
+$('archivedBtn').addEventListener('click',()=>{
+  archivedMode=!archivedMode;
+  $('archivedBtn').textContent=archivedMode?'Volver':'Archivadas';
+  loadSessions();
+});
+
+// --- Session actions ---
+async function renameSession(id,currentTitle){
+  showModal('Renombrar sesion',currentTitle,async(newTitle)=>{
+    if(!newTitle)return;
+    await fetch(`/api/sessions/${id}/rename`,{method:'POST',headers:authHeaders(),body:JSON.stringify({title:newTitle})});
+    loadSessions();
+  });
+}
+async function archiveSession(id){
+  await fetch(`/api/sessions/${id}/archive`,{method:'POST',headers:authHeaders()});
+  loadSessions();
+}
+async function unarchiveSession(id){
+  await fetch(`/api/sessions/${id}/unarchive`,{method:'POST',headers:authHeaders()});
+  loadSessions();
 }
 
-function openPrompt(id) {
-  currentSessionId = id;
-  $('modalSessionId').textContent = id;
-  $('promptText').value = '';
-  $('responseBox').className = 'response';
-  $('responseBox').textContent = '';
-  $('sendBtn').disabled = false;
-  $('sendBtn').textContent = 'Enviar';
-  $('historyBox').className = 'history show';
-  $('historyBox').innerHTML = '<div class="hist-loading">Cargando historial...</div>';
-  $('overlay').classList.add('show');
-  loadHistory(id);
-  setTimeout(() => $('promptText').focus(), 100);
-}
-
-async function loadHistory(id) {
-  try {
-    const r = await fetch(`/api/sessions/${id}/history`, { headers: authHeaders() });
-    if (!r.ok) { $('historyBox').innerHTML = ''; return; }
-    const msgs = await r.json();
-    if (!msgs.length) { $('historyBox').innerHTML = '<div class="hist-loading">Sin mensajes previos</div>'; return; }
-    $('historyBox').innerHTML = msgs.map(m => {
-      const cls = m.role === 'user' ? 'user' : 'assistant';
-      const roleLabel = m.role === 'user' ? 'Tu' : 'Devin';
-      const content = escapeHtml(m.content);
-      const time = m.time_iso ? `<span style="float:right">${m.time_iso}</span>` : '';
-      return `<div class="hist-msg ${cls}"><div class="role">${roleLabel}${time}</div>${content}</div>`;
-    }).join('');
-    // Scroll al final
-    $('historyBox').scrollTop = $('historyBox').scrollHeight;
-  } catch (e) {
-    $('historyBox').innerHTML = '<div class="hist-loading">Error al cargar historial</div>';
-  }
-}
-
-$('cancelBtn').addEventListener('click', () => $('overlay').classList.remove('show'));
-$('overlay').addEventListener('click', e => { if (e.target === $('overlay')) $('overlay').classList.remove('show'); });
-
-$('sendBtn').addEventListener('click', async () => {
-  const prompt = $('promptText').value.trim();
-  if (!prompt || !currentSessionId) return;
-  $('sendBtn').disabled = true;
-  $('sendBtn').innerHTML = '<span class="spinner"></span> Enviando...';
-  const rb = $('responseBox');
-  rb.className = 'response show';
-  rb.textContent = 'Esperando respuesta de Devin...';
-  try {
-    const r = await fetch(`/api/sessions/${currentSessionId}/prompt`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ prompt }),
-    });
-    const data = await r.json();
-    if (data.ok) {
-      rb.className = 'response show';
-      rb.textContent = data.output || '(sin output)';
-    } else {
-      rb.className = 'response show error';
-      rb.textContent = data.error || data.output || 'Error';
+// --- New session ---
+$('newSessionFab').addEventListener('click',()=>{
+  showModal('Nueva sesion','',async(prompt)=>{
+    if(!prompt)return;
+    $('newSessionFab').disabled=true;
+    const r=await fetch('/api/sessions/new',{method:'POST',headers:authHeaders(),body:JSON.stringify({prompt})});
+    const data=await r.json();
+    $('newSessionFab').disabled=false;
+    if(data.ok&&data.session_id){
+      openChat(data.session_id,data.title||'Nueva sesion');
+    }else{
+      alert('Error: '+(data.error||'no se pudo crear'));
     }
-  } catch (e) {
-    rb.className = 'response show error';
-    rb.textContent = 'Error de red: ' + e.message;
-  }
-  $('sendBtn').disabled = false;
-  $('sendBtn').textContent = 'Enviar';
+    loadSessions();
+  });
 });
 
-$('refreshBtn').addEventListener('click', loadSessions);
+// --- Chat view ---
+function openChat(id,title){
+  currentSessionId=id;
+  currentSessionTitle=title;
+  $('chatTitle').textContent=title;
+  $('chatSessionId').textContent=id;
+  $('chatView').classList.add('show');
+  $('listHeader').style.display='none';
+  $('sessionListView').style.display='none';
+  $('newSessionFab').style.display='none';
+  if(refreshTimer)clearInterval(refreshTimer);
+  $('chatMsgs').innerHTML='<div class="empty">Cargando historial...</div>';
+  loadHistory(id);
+}
 
-$('releaseBtn').addEventListener('click', async () => {
-  if (!currentSessionId) return;
-  $('releaseBtn').disabled = true;
-  $('releaseBtn').textContent = '...';
-  try {
-    await fetch(`/api/sessions/${currentSessionId}/release`, { method: 'POST', headers: authHeaders() });
-    $('releaseBtn').textContent = 'OK';
-    setTimeout(() => { $('releaseBtn').textContent = 'Liberar'; $('releaseBtn').disabled = false; }, 1500);
-  } catch (e) {
-    $('releaseBtn').textContent = 'Error';
-    setTimeout(() => { $('releaseBtn').textContent = 'Liberar'; $('releaseBtn').disabled = false; }, 1500);
+async function loadHistory(id){
+  try{
+    const r=await fetch(`/api/sessions/${id}/history`,{headers:authHeaders()});
+    if(!r.ok)throw new Error();
+    const msgs=await r.json();
+    const container=$('chatMsgs');
+    if(!msgs.length){container.innerHTML='<div class="empty">Sin mensajes previos</div>';return;}
+    container.innerHTML=msgs.map(m=>renderMessage(m)).join('');
+    container.scrollTop=container.scrollHeight;
+  }catch(e){$('chatMsgs').innerHTML='<div class="empty">Error al cargar historial</div>';}
+}
+
+function renderMessage(m){
+  const role=m.role==='user'?'Tu':m.role==='assistant'?'Devin':'Sistema';
+  const time=m.time?`<span class="time">${m.time}</span>`:'';
+  let html=`<div class="msg ${m.role}"><div class="role">${role}${time}</div>`;
+  if(m.content)html+=`<div class="bubble">${esc(m.content)}</div>`;
+  if(m.thinking)html+=`<div class="thinking">💭 ${esc(m.thinking)}</div>`;
+  if(m.tool_calls){
+    for(const tc of m.tool_calls){
+      const statusCls=tc.status||'';
+      html+=`<div class="tool-call">
+        <span class="tc-title">${esc(tc.name)}</span>
+        <span class="tc-status ${statusCls}">${esc(tc.status||'')}</span>
+        ${tc.title?`<div>${esc(tc.title)}</div>`:''}
+        ${tc.result?`<div class="tc-result">${esc(tc.result)}</div>`:''}
+      </div>`;
+    }
   }
+  html+='</div>';
+  return html;
+}
+
+$('backBtn').addEventListener('click',()=>{
+  $('chatView').classList.remove('show');
+  showListView();
 });
 
-// Auto-refresh cada 15s
-setInterval(() => { if (credB64 && $('login').style.display === 'none') loadSessions(); }, 15000);
+$('chatReleaseBtn').addEventListener('click',async()=>{
+  $('chatReleaseBtn').disabled=true;
+  try{
+    await fetch(`/api/sessions/${currentSessionId}/release`,{method:'POST',headers:authHeaders()});
+    $('chatReleaseBtn').textContent='OK';
+    setTimeout(()=>{$('chatReleaseBtn').textContent='Liberar';$('chatReleaseBtn').disabled=false;},1500);
+  }catch(e){$('chatReleaseBtn').textContent='Error';setTimeout(()=>{$('chatReleaseBtn').textContent='Liberar';$('chatReleaseBtn').disabled=false;},1500);}
+});
 
+// --- Send prompt with streaming ---
+$('chatSendBtn').addEventListener('click',sendPrompt);
+$('chatInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendPrompt();}
+});
+
+async function sendPrompt(){
+  const text=$('chatInput').value.trim();
+  if(!text||!currentSessionId||isStreaming)return;
+  $('chatInput').value='';
+  isStreaming=true;
+  $('chatSendBtn').disabled=true;
+
+  // Mostrar mensaje del usuario inmediatamente
+  const container=$('chatMsgs');
+  container.innerHTML+=renderMessage({role:'user',content:text,time:''});
+  container.scrollTop=container.scrollHeight;
+
+  // Crear div para respuesta streaming
+  const respId='stream-'+Date.now();
+  container.innerHTML+=`<div class="msg assistant" id="${respId}"><div class="role">Devin</div><div class="bubble" id="${respId}-content"></div><div class="thinking" id="${respId}-thinking" style="display:none"></div><div id="${respId}-tools"></div></div>`;
+  container.scrollTop=container.scrollHeight;
+
+  const indicator=$('streamingIndicator');
+  indicator.classList.add('show');
+  $('streamingText').textContent='Devin esta trabajando...';
+
+  let contentBuf='',thinkingBuf='';
+  const tools={};
+
+  try{
+    const url=`/api/sessions/${currentSessionId}/stream?prompt=${encodeURIComponent(text)}`;
+    const resp=await fetch(url,{headers:authHeaders()});
+    const reader=resp.body.getReader();
+    const decoder=new TextDecoder();
+    let buffer='';
+
+    while(true){
+      const{done,value}=await reader.read();
+      if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const lines=buffer.split('\n');
+      buffer=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const evt=JSON.parse(line.slice(6));
+          handleStreamEvent(evt,respId,tools);
+        }catch(e){}
+      }
+    }
+  }catch(e){
+    console.error('Stream error:',e);
+  }
+
+  isStreaming=false;
+  $('chatSendBtn').disabled=false;
+  indicator.classList.remove('show');
+  // Recargar historial completo para tener los datos finales
+  setTimeout(()=>loadHistory(currentSessionId),1500);
+}
+
+function handleStreamEvent(evt,respId,tools){
+  const contentEl=$(respId+'-content');
+  const thinkingEl=$(respId+'-thinking');
+  const toolsEl=$(respId+'-tools');
+
+  if(evt.type==='status'){
+    $('streamingText').textContent=evt.message;
+  }else if(evt.type==='handoff'){
+    $('streamingText').textContent='Tomando control de la sesion...';
+  }else if(evt.type==='update'){
+    const kind=evt.kind;
+    if(kind==='agent_message_chunk'){
+      contentBuf+=evt.content;
+      contentEl.textContent=contentBuf;
+      scrollToBottom();
+    }else if(kind==='agent_message'){
+      contentBuf=evt.content;
+      contentEl.textContent=contentBuf;
+      scrollToBottom();
+    }else if(kind==='agent_thought_chunk'){
+      thinkingBuf+=evt.thinking;
+      thinkingEl.textContent=thinkingBuf;
+      thinkingEl.style.display='block';
+      scrollToBottom();
+    }else if(kind==='agent_thought'){
+      thinkingBuf=evt.thinking;
+      thinkingEl.textContent=thinkingBuf;
+      thinkingEl.style.display='block';
+    }else if(kind==='tool_call_update'){
+      const tid=evt.tool_call_id;
+      if(!tools[tid])tools[tid]={};
+      tools[tid].title=evt.title;
+      tools[tid].status=evt.status;
+      tools[tid].name=evt.kind_tool;
+      updateTools(toolsEl,tools);
+      $('streamingText').textContent=`Ejecutando: ${evt.title||evt.kind_tool||'tool'}`;
+    }else if(kind==='tool_call_content_chunk'){
+      const tid=evt.tool_call_id;
+      if(!tools[tid])tools[tid]={};
+      tools[tid].result=(tools[tid].result||'')+evt.content;
+      updateTools(toolsEl,tools);
+    }else if(kind==='state_update'){
+      if(evt.state==='running'){
+        $('streamingText').textContent='Devin esta trabajando...';
+      }else if(evt.state==='idle'){
+        $('streamingText').textContent='Completado';
+      }
+    }else if(kind==='user_message'){
+      // Ignorar - ya lo mostramos
+    }
+  }else if(evt.type==='done'){
+    $('streamingText').textContent='Completado';
+  }else if(evt.type==='released'){
+    // Sesion liberada
+  }else if(evt.type==='error'){
+    contentEl.textContent='Error: '+evt.message;
+    contentEl.style.color='var(--red)';
+  }
+}
+
+function updateTools(el,tools){
+  let html='';
+  for(const[tid,tc]of Object.entries(tools)){
+    const statusCls=tc.status||'';
+    html+=`<div class="tool-call">
+      <span class="tc-title">${esc(tc.name||'tool')}</span>
+      <span class="tc-status ${statusCls}">${esc(tc.status||'')}</span>
+      ${tc.title?`<div>${esc(tc.title)}</div>`:''}
+      ${tc.result?`<div class="tc-result">${esc(tc.result)}</div>`:''}
+    </div>`;
+  }
+  el.innerHTML=html;
+  scrollToBottom();
+}
+
+function scrollToBottom(){
+  const c=$('chatMsgs');
+  c.scrollTop=c.scrollHeight;
+}
+
+// --- Modal ---
+let modalCallback=null;
+function showModal(title,defaultText,callback){
+  modalCallback=callback;
+  $('modalTitle').textContent=title;
+  $('modalInput').value=defaultText;
+  $('modalOverlay').classList.add('show');
+  setTimeout(()=>$('modalInput').focus(),100);
+}
+$('modalOk').addEventListener('click',()=>{
+  const val=$('modalInput').value.trim();
+  $('modalOverlay').classList.remove('show');
+  if(modalCallback){modalCallback(val);modalCallback=null;}
+});
+$('modalCancel').addEventListener('click',()=>{
+  $('modalOverlay').classList.remove('show');
+  modalCallback=null;
+});
+$('modalInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('modalOk').click();});
+
+// --- Init ---
 checkAuth();
 </script>
 </body>
