@@ -27,7 +27,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .header h1{font-size:16px;margin:0;font-weight:600}
 .header .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
-.header .btn{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer}
+.header .btn{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:12px;cursor:pointer;min-height:36px;-webkit-tap-highlight-color:transparent;flex-shrink:0}
 .header .btn:active{background:var(--border)}
 .header .spacer{flex:1}
 
@@ -76,7 +76,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .view-chat{flex:1;display:none;flex-direction:column;overflow:hidden;min-height:0}
 .view-chat.show{display:flex}
 .chat-header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0}
-.chat-header .back{background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px}
+.chat-header .back{background:none;border:none;color:var(--text);font-size:24px;cursor:pointer;padding:8px 12px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
 .chat-header .info{flex:1;overflow:hidden}
 .chat-header .info .t{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-header .info .s{font-size:11px;color:var(--muted);font-family:monospace}
@@ -168,9 +168,9 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 <div id="login">
   <h1>Devin Mobile</h1>
   <p>Introduce tus datos de acceso</p>
-  <input id="loginUrlInput" type="text" placeholder="URL del PC (ej: http://100.x.y.z:8787)" autocomplete="off" style="display:none">
-  <input id="userInput" type="text" placeholder="Usuario" autocomplete="off">
-  <input id="passInput" type="password" placeholder="Contrasena" autocomplete="off">
+  <input id="loginUrlInput" type="text" placeholder="URL del PC (ej: http://100.x.y.z:8787)" autocomplete="off" inputmode="url" enterkeyhint="next" style="display:none">
+  <input id="userInput" type="text" placeholder="Usuario" autocomplete="off" inputmode="text" enterkeyhint="next">
+  <input id="passInput" type="password" placeholder="Contrasena" autocomplete="off" inputmode="text" enterkeyhint="go">
   <button id="loginBtn">Entrar</button>
   <div class="err" id="loginErr"></div>
 </div>
@@ -209,7 +209,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
     <span id="streamingText">Devin esta trabajando...</span>
   </div>
   <div class="chat-input">
-    <textarea id="chatInput" placeholder="Escribe un mensaje..." rows="1"></textarea>
+    <textarea id="chatInput" placeholder="Escribe un mensaje..." rows="1" enterkeyhint="send" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
     <button id="chatSendBtn">Enviar</button>
     <button id="chatStopBtn" class="stop-btn" style="display:none">Detener</button>
   </div>
@@ -1120,7 +1120,7 @@ $('archivedBtn').addEventListener('click',()=>{
 });
 
 // --- Auto-update from GitHub releases ---
-const APP_VERSION='1.3.0';
+const APP_VERSION='1.3.1';
 const GITHUB_REPO='elbada25/DevinMobile';
 async function checkForUpdates(){
   try{
@@ -1275,6 +1275,58 @@ async function showDevinLoginDialog(){
     $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
   }
 }
+
+// --- Android back button handling ---
+function handleAndroidBack(){
+  // Si el modal está abierto, cerrarlo
+  const modal=$('modalOverlay');
+  if(modal.classList.contains('show')){
+    modal.classList.remove('show');
+    return;
+  }
+  // Si estamos en el chat, volver a la lista
+  const chat=$('chatView');
+  if(chat.classList.contains('show')){
+    chat.classList.remove('show');
+    showListView();
+    return;
+  }
+  // Si estamos en login, no hacer nada (no salir)
+  const loginEl=$('login');
+  if(loginEl&&(loginEl.style.display==='flex'||loginEl.style.display===''||loginEl.style.display==='block'))return;
+  // Si estamos en la lista, salir de la app
+  if(navigator.app&&navigator.app.exitApp){
+    navigator.app.exitApp();
+  }
+}
+
+// Registrar listener del boton atras de Android
+async function setupBackButton(){
+  try{
+    if(typeof window.Capacitor==='undefined')return;
+    // Capacitor 6: @capacitor/app se auto-registra
+    if(Capacitor.Plugins&&Capacitor.Plugins.App){
+      await Capacitor.Plugins.App.addListener('backButton',({canGoBack})=>{
+        handleAndroidBack();
+      });
+      console.log('BackButton listener registrado via Capacitor App plugin');
+    }
+  }catch(e){
+    console.warn('No se pudo registrar backButton listener:',e);
+  }
+}
+
+// document-level backbutton (Cordova/legacy fallback)
+document.addEventListener('backbutton',e=>{
+  e.preventDefault();
+  handleAndroidBack();
+},false);
+
+// --- Init ---
+checkAuth();
+setupBackButton();
+// Verificar actualizaciones a los 3 segundos
+setTimeout(checkForUpdates,3000);
 
 // --- Init ---
 checkAuth();
