@@ -162,6 +162,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .modal .pc-list-item button{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
 <div id="app">
@@ -218,7 +219,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
-    <button class="modal-close" id="modalCloseBtn" onclick="document.getElementById('modalOverlay').classList.remove('show')" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:22px;color:var(--text-secondary);cursor:pointer;padding:4px 8px;line-height:1;z-index:2">&times;</button>
+    <button class="modal-close" id="modalCloseBtn" onclick="stopQrScanner();document.getElementById('modalOverlay').classList.remove('show')" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:22px;color:var(--text-secondary);cursor:pointer;padding:4px 8px;line-height:1;z-index:2">&times;</button>
     <h3 id="modalTitle">Titulo</h3>
     <div id="modalBody"></div>
     <div class="modal-actions" id="modalActions">
@@ -1109,7 +1110,7 @@ function showModalInput(title,defaultText,callback){
   $('modalOverlay').classList.add('show');
   setTimeout(()=>$('modalInput').focus(),100);
 }
-$('modalCancel').addEventListener('click',()=>{$('modalOverlay').classList.remove('show');});
+$('modalCancel').addEventListener('click',()=>{stopQrScanner();$('modalOverlay').classList.remove('show');});
 $('modalInput')&&$('modalInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('modalOk').click();});
 
 $('refreshBtn').addEventListener('click',loadSessions);
@@ -1120,7 +1121,7 @@ $('archivedBtn').addEventListener('click',()=>{
 });
 
 // --- Auto-update from GitHub releases ---
-const APP_VERSION='1.4.1';
+const APP_VERSION='1.5.0';
 const GITHUB_REPO='elbada25/DevinMobile';
 async function checkForUpdates(){
   try{
@@ -1198,6 +1199,16 @@ function showUpdateModal(version,notes,downloadUrl){
 // --- Silent Devin login ---
 $('loginDevinBtn').addEventListener('click',showDevinLoginDialog);
 
+let _qrScanner=null;
+function stopQrScanner(){
+  if(_qrScanner){
+    try{_qrScanner.stop();}catch(e){}
+    _qrScanner=null;
+  }
+  const el=document.getElementById('qrReader');
+  if(el)el.innerHTML='';
+}
+
 async function showDevinLoginDialog(){
   const body=$('modalBody');
   const pc=pcs[0];
@@ -1214,67 +1225,45 @@ async function showDevinLoginDialog(){
     const data=await r.json();
     if(data.logged_in){
       body.innerHTML=`<div style="text-align:center;padding:20px">
-        <p style="font-size:14px;color:var(--green);margin-bottom:8px">Devin CLI esta autenticado</p>
+        <p style="font-size:14px;color:var(--green);margin-bottom:8px">Devin CLI ya esta autenticado</p>
         <p style="font-size:12px;color:var(--muted)">${esc(data.detail||'')}</p>
       </div>`;
       $('modalActions').style.display='flex';
       $('modalOk').textContent='Cerrar';
-      $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
+      $('modalOk').onclick=()=>{$('modalOverlay').classList.remove('show');};
       return;
     }
-    // No autenticado — iniciar login y mostrar QR
-    body.innerHTML=`<div style="text-align:center;padding:20px">
-      <p style="font-size:14px;margin-bottom:12px">Generando QR de login...</p>
-      <div class="spinner" style="margin:0 auto"></div>
+    // No autenticado — mostrar opciones
+    body.innerHTML=`<div>
+      <p style="font-size:14px;margin-bottom:16px">Devin CLI no esta autenticado en <strong>${esc(pc.name)}</strong></p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Ve a tu PC y abre <strong>http://TU_IP:8787/login</strong> en el navegador. Aparecera un QR. Escanearlo aqui:</p>
+      <button type="button" id="scanQrBtn" onclick="startQrScanner()" style="width:100%;padding:14px;border:none;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer;font-size:15px;margin-bottom:12px">Escanear QR con camara</button>
+      <div id="qrReader" style="display:none;border-radius:10px;overflow:hidden;margin-bottom:12px"></div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:8px">O pega manualmente el codigo de login:</p>
+      <input id="devinLoginToken" type="text" placeholder="Codigo de verificacion" style="width:100%;font-size:16px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);margin-bottom:8px" autocomplete="off">
     </div>`;
-    const r2=await fetch(pc.url+'/api/auth/start-login',{method:'POST',headers:authHeaders(pc.id)});
-    const data2=await r2.json();
-    if(data2.ok&&data2.url){
-      // Generar QR con libreria que soporta URLs largas
-      let qrHtml='';
+    $('modalActions').style.display='flex';
+    $('modalOk').textContent='Enviar codigo';
+    $('modalOk').onclick=async()=>{
+      const token=$('devinLoginToken').value.trim();
+      if(!token){showToast('Introduce el codigo','error');return;}
+      $('modalOk').disabled=true;
+      stopQrScanner();
       try{
-        if(typeof qrcode!=='undefined'){
-          const qr=qrcode(0,'M');
-          qr.addData(data2.url);
-          qr.make();
-          qrHtml=qr.createTableTag(3);
+        const r3=await fetch(pc.url+'/api/auth/submit-token',{method:'POST',headers:authHeaders(pc.id),body:JSON.stringify({token})});
+        const data3=await r3.json();
+        if(data3.ok){
+          showToast('Login exitoso','success');
+          $('modalOverlay').classList.remove('show');
+        }else{
+          showToast('Error: '+(data3.error||''),'error');
+          $('modalOk').disabled=false;
         }
-      }catch(e){qrHtml='';}
-      body.innerHTML=`<div>
-        <p style="font-size:13px;margin-bottom:10px">Escanea el QR con otro dispositivo o abre la URL, inicia sesion en Devin y pega el codigo:</p>
-        ${qrHtml?`<div style="display:flex;justify-content:center;background:#fff;border-radius:8px;padding:12px;margin-bottom:12px">${qrHtml}</div>`:''}
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;font-size:10px;font-family:monospace;word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText('${data2.url}');showToast('URL copiada','success')">${esc(data2.url)}</div>
-        <button type="button" onclick="window.open('${data2.url}','_blank')" style="width:100%;padding:10px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer;font-size:13px;margin-bottom:12px">Abrir URL</button>
-        <label>Pega el codigo aqui:</label>
-        <input id="devinLoginToken" type="text" placeholder="Codigo de verificacion" style="width:100%;font-size:16px" autocomplete="off">
-      </div>`;
-      $('modalActions').style.display='flex';
-      $('modalOk').textContent='Enviar';
-      $('modalOk').onclick=async()=>{
-        const token=$('devinLoginToken').value.trim();
-        if(!token){showToast('Introduce el codigo','error');return;}
-        $('modalOk').disabled=true;
-        try{
-          const r3=await fetch(pc.url+'/api/auth/submit-token',{method:'POST',headers:authHeaders(pc.id),body:JSON.stringify({token})});
-          const data3=await r3.json();
-          if(data3.ok){
-            showToast('Login exitoso','success');
-            $('modalOverlay').classList.remove('show');
-          }else{
-            showToast('Error: '+(data3.error||''),'error');
-            $('modalOk').disabled=false;
-          }
-        }catch(e){showToast('Error de conexion','error');$('modalOk').disabled=false;}
-      };
-    }else{
-      body.innerHTML=`<div style="text-align:center;padding:20px">
-        <p style="font-size:14px;color:var(--red);margin-bottom:8px">No se pudo iniciar login</p>
-        <p style="font-size:12px;color:var(--muted)">${esc(data2.error||'')}</p>
-      </div>`;
-      $('modalActions').style.display='flex';
-      $('modalOk').textContent='Cerrar';
-      $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
-    }
+      }catch(e){showToast('Error de conexion','error');$('modalOk').disabled=false;}
+    };
+    $('modalCancel').textContent='Cancelar';
+    $('modalCancel').onclick=()=>{stopQrScanner();$('modalOverlay').classList.remove('show');};
   }catch(e){
     body.innerHTML=`<div style="text-align:center;padding:20px">
       <p style="font-size:14px;color:var(--red)">Error de conexion</p>
@@ -1282,6 +1271,80 @@ async function showDevinLoginDialog(){
     $('modalActions').style.display='flex';
     $('modalOk').textContent='Cerrar';
     $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
+  }
+}
+
+async function startQrScanner(){
+  const readerEl=document.getElementById('qrReader');
+  const btn=document.getElementById('scanQrBtn');
+  if(!readerEl)return;
+  btn.disabled=true;
+  btn.textContent='Iniciando camara...';
+  readerEl.style.display='block';
+  try{
+    if(typeof Html5Qrcode==='undefined'){
+      showToast('Libreria QR no cargada','error');
+      btn.disabled=false;
+      btn.textContent='Escanear QR con camara';
+      readerEl.style.display='none';
+      return;
+    }
+    _qrScanner=new Html5Qrcode('qrReader');
+    const config={fps:10,qrbox:{width:250,height:250},aspectRatio:1.0};
+    await _qrScanner.start(
+      {facingMode:'environment'},
+      config,
+      (decodedText)=>{
+        // QR escaneado — contiene la URL de login de Devin
+        stopQrScanner();
+        btn.textContent='QR escaneado!';
+        // Abrir la URL en el navegador del movil
+        const url=decodedText.trim();
+        if(url.startsWith('http')){
+          // Mostrar URL y abrir
+          const body=$('modalBody');
+          body.innerHTML=`<div>
+            <p style="font-size:14px;color:var(--green);margin-bottom:12px">QR escaneado!</p>
+            <p style="font-size:13px;margin-bottom:10px">Abre la URL para iniciar sesion en Devin, luego copia el codigo y pegalo abajo:</p>
+            <button type="button" onclick="window.open('${esc(url)}','_blank')" style="width:100%;padding:12px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer;font-size:14px;margin-bottom:12px">Abrir login de Devin</button>
+            <input id="devinLoginToken" type="text" placeholder="Codigo de verificacion" style="width:100%;font-size:16px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);margin-bottom:8px" autocomplete="off" value="">
+          </div>`;
+          $('modalOk').textContent='Enviar codigo';
+          $('modalOk').onclick=async()=>{
+            const token=$('devinLoginToken').value.trim();
+            if(!token){showToast('Introduce el codigo','error');return;}
+            $('modalOk').disabled=true;
+            const pc=pcs[0];
+            try{
+              const r3=await fetch(pc.url+'/api/auth/submit-token',{method:'POST',headers:authHeaders(pc.id),body:JSON.stringify({token})});
+              const data3=await r3.json();
+              if(data3.ok){
+                showToast('Login exitoso','success');
+                $('modalOverlay').classList.remove('show');
+              }else{
+                showToast('Error: '+(data3.error||''),'error');
+                $('modalOk').disabled=false;
+              }
+            }catch(e){showToast('Error de conexion','error');$('modalOk').disabled=false;}
+          };
+          // Abrir automaticamente
+          window.open(url,'_blank');
+        }else{
+          // El QR no es una URL — quizas es el codigo directamente
+          $('devinLoginToken').value=url;
+          showToast('Codigo pegado automaticamente','success');
+        }
+      },
+      (err)=>{
+        // Error de escaneo (no mostrar, es normal mientras escanea)
+      }
+    );
+    btn.textContent='Escaneando... (apunta al QR del PC)';
+  }catch(e){
+    showToast('Error camara: '+e.message,'error');
+    btn.disabled=false;
+    btn.textContent='Escanear QR con camara';
+    readerEl.style.display='none';
   }
 }
 
