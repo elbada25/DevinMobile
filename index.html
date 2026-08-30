@@ -167,7 +167,8 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 
 <div id="login">
   <h1>Devin Mobile</h1>
-  <p>Introduce tu usuario y contrasena</p>
+  <p>Introduce tus datos de acceso</p>
+  <input id="loginUrlInput" type="text" placeholder="URL del PC (ej: http://100.x.y.z:8787)" autocomplete="off" style="display:none">
   <input id="userInput" type="text" placeholder="Usuario" autocomplete="off">
   <input id="passInput" type="password" placeholder="Contrasena" autocomplete="off">
   <button id="loginBtn">Entrar</button>
@@ -215,6 +216,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
+    <button class="modal-close" id="modalCloseBtn" onclick="document.getElementById('modalOverlay').classList.remove('show')" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:22px;color:var(--text-secondary);cursor:pointer;padding:4px 8px;line-height:1;z-index:2">&times;</button>
     <h3 id="modalTitle">Titulo</h3>
     <div id="modalBody"></div>
     <div class="modal-actions" id="modalActions">
@@ -301,17 +303,15 @@ function md(text){
 // --- Auth ---
 async function checkAuth(){
   loadPcs();
+  // En Capacitor, mostrar campo URL si el primer PC no tiene URL
+  if(isCapacitor()){$('loginUrlInput').style.display='block';}
   if(!currentCredB64()){
     showLogin();return;
   }
-  // Si el primer PC no tiene URL (Capacitor), ir a config de PCs
+  // Si el primer PC no tiene URL (Capacitor), ir a login
   const pc=pcs[0];
   if(!pc.url){
-    hideLogin();
-    $('listHeader').style.display='flex';
-    $('sessionListView').style.display='block';
-    showPcConfig();
-    showToast('Configura tu PC para empezar','error');
+    showLogin();
     return;
   }
   try{
@@ -328,7 +328,14 @@ $('loginBtn').addEventListener('click',async()=>{
   if(!u||!p){$('loginErr').textContent='Introduce usuario y contrasena';return;}
   $('loginErr').textContent='';$('loginBtn').disabled=true;
   try{
-    const pc=pcs[0];
+    // En Capacitor, obtener URL del campo de login
+    let pc=pcs[0];
+    if(isCapacitor()&&!pc.url){
+      const url=$('loginUrlInput').value.trim().replace(/\/$/,'');
+      if(!url){$('loginErr').textContent='Introduce la URL del PC';$('loginBtn').disabled=false;return;}
+      pc.url=url;
+      savePcs();
+    }
     const r=await fetch(pc.url+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
     if(r.ok){
       const credB64=btoa(u+':'+p);
@@ -339,7 +346,7 @@ $('loginBtn').addEventListener('click',async()=>{
       hideLogin();showListView();
     }
     else $('loginErr').textContent='Usuario o contrasena incorrectos';
-  }catch(e){$('loginErr').textContent='Error de conexion';}
+  }catch(e){$('loginErr').textContent='Error de conexion: '+e.message;}
   $('loginBtn').disabled=false;
 });
 $('passInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click();});
@@ -568,6 +575,7 @@ function editPc(id){
     <input id="editPcUser" type="text" value="${esc(user)}">
     <label>Contrasena</label>
     <input id="editPcPass" type="password" value="${esc(pass)}" placeholder="(sin cambios)">`;
+  $('modalTitle').textContent='Editar PC';
   $('modalActions').style.display='flex';
   $('modalOk').textContent='Guardar';
   $('modalOk').onclick=()=>{
@@ -581,6 +589,7 @@ function editPc(id){
     showPcConfig();
     loadSessions();
   };
+  $('modalOverlay').classList.add('show');
 }
 
 function deletePc(id){
@@ -1097,8 +1106,55 @@ $('archivedBtn').addEventListener('click',()=>{
   loadSessions();
 });
 
+// --- Auto-update from GitHub releases ---
+const APP_VERSION='1.0.0';
+const GITHUB_REPO='elbada25/DevinMobile';
+async function checkForUpdates(){
+  try{
+    const r=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,{headers:{'Accept':'application/vnd.github.v3+json'}});
+    if(!r.ok)return;
+    const release=await r.json();
+    const latestTag=release.tag_name||'v1.0.0';
+    const latestVersion=latestTag.replace(/^v/,'');
+    if(compareVersions(latestVersion,APP_VERSION)>0){
+      const apkAsset=release.assets&&release.assets.find(a=>a.name.endsWith('.apk'));
+      if(apkAsset){
+        showUpdateModal(latestTag,release.body||'',apkAsset.browser_download_url);
+      }
+    }
+  }catch(e){/* silencioso */}
+}
+function compareVersions(a,b){
+  const pa=a.split('.').map(Number),pb=b.split('.').map(Number);
+  for(let i=0;i<Math.max(pa.length,pb.length);i++){
+    const va=pa[i]||0,vb=pb[i]||0;
+    if(va>vb)return 1;if(va<vb)return -1;
+  }
+  return 0;
+}
+function showUpdateModal(version,notes,downloadUrl){
+  const body=$('modalBody');
+  body.innerHTML=`<div style="margin-bottom:12px">
+    <p style="font-size:14px;margin-bottom:8px">Hay una nueva version disponible: <strong>${esc(version)}</strong></p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Tu version actual: ${APP_VERSION}</p>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap">${esc(notes)}</div>
+  </div>`;
+  $('modalTitle').textContent='Actualizacion disponible';
+  $('modalActions').style.display='flex';
+  $('modalOk').textContent='Descargar APK';
+  $('modalOk').onclick=()=>{
+    window.open(downloadUrl,'_blank');
+    $('modalOverlay').classList.remove('show');
+  };
+  $('modalCancel').textContent='Mas tarde';
+  $('modalCancel').onclick=()=>$('modalOverlay').classList.remove('show');
+  $('modalOverlay').classList.add('show');
+}
+
 // --- Init ---
 checkAuth();
+// Verificar actualizaciones a los 3 segundos
+setTimeout(checkForUpdates,3000);
 </script>
 </body>
 </html>

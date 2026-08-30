@@ -531,10 +531,26 @@ class ACPClient:
             else:
                 self._authenticated = True
         else:
-            # Newer CLI (v3000+): only supports devin-browser auth, but
-            # reads credentials from env vars / stored CLI creds automatically.
-            # No need to call authenticate — just proceed.
-            self._authenticated = True
+            # Newer CLI (v3000+): only supports devin-browser auth.
+            # Intentar authenticate con devin-browser y timeout corto.
+            # Si el CLI ya tiene credenciales stored, puede responder sin abrir navegador.
+            # Si no responde en 5s, asumimos que está autenticado (session/list funciona sin auth).
+            try:
+                auth_resp = self._request("authenticate", {
+                    "methodId": "devin-browser",
+                    "meta": {},
+                }, timeout=5)
+                if "error" not in auth_resp:
+                    self._authenticated = True
+                    print("  ACP authenticate: OK (devin-browser)", flush=True)
+                else:
+                    print(f"  ACP authenticate warning: {auth_resp.get('error', '')}", flush=True)
+                    self._authenticated = True
+            except Exception as e:
+                # Timeout — el navegador se abrió o no hay respuesta
+                # Proceder sin auth (session/list funciona sin autenticar)
+                print(f"  ACP authenticate: timeout, procediendo sin auth", flush=True)
+                self._authenticated = True
         return resp
 
     def _next_id(self):
