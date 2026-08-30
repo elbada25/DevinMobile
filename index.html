@@ -2,15 +2,17 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1117">
 <title>Devin Mobile</title>
 <style>
-:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--accent:#1f6feb}
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--accent:#1f6feb;--purple:#bc8cff}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:15px;height:100vh;overflow:hidden}
 #app{height:100vh;display:flex;flex-direction:column}
+@supports (height:100dvh){body{height:100dvh}#app{height:100dvh}}
 
 /* Login */
 #login{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
@@ -29,81 +31,135 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .header .btn:active{background:var(--border)}
 .header .spacer{flex:1}
 
-/* Session list view */
-.view-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
-.session{background:var(--card);border:1px solid var(--border);border-radius:10px;margin:8px 10px;padding:12px 14px;cursor:pointer;transition:border-color .15s}
-.session:active{border-color:var(--accent)}
+/* Connection status */
+.conn-status{position:fixed;top:0;left:0;right:0;padding:4px 14px;font-size:11px;text-align:center;z-index:200;display:none}
+.conn-status.show{display:block}
+.conn-status.offline{background:rgba(248,81,73,.2);color:var(--red)}
+.conn-status.reconnecting{background:rgba(210,153,34,.2);color:var(--yellow)}
+
+/* PC group */
+.pc-group{margin:8px 10px;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.pc-group-header{background:rgba(31,111,235,.08);padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:14px}
+.pc-group-header:active{background:rgba(31,111,235,.15)}
+.pc-group-header .pc-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.pc-group-header .pc-dot.offline{background:var(--red)}
+.pc-group-header .pc-name{flex:1}
+.pc-group-header .pc-count{font-size:11px;color:var(--muted);font-weight:400}
+.pc-group-header .pc-edit{font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--muted);cursor:pointer}
+.pc-group-body{display:none}
+.pc-group-body.show{display:block}
+
+/* Session */
+.session{background:var(--card);border-top:1px solid var(--border);padding:12px 14px;cursor:pointer;transition:background .15s}
+.session:active{background:var(--border)}
 .session-row{display:flex;align-items:center;gap:8px}
 .s-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .s-dot.active{background:var(--green);box-shadow:0 0 6px var(--green)}
 .s-dot.idle{background:var(--muted)}
+.s-dot.mobile{background:var(--blue);box-shadow:0 0 6px var(--blue)}
 .s-title{font-size:14px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .s-badge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:500}
 .s-badge.active{background:rgba(63,185,80,.15);color:var(--green)}
 .s-badge.idle{background:rgba(139,148,158,.15);color:var(--muted)}
+.s-badge.mobile{background:rgba(88,166,255,.15);color:var(--blue)}
 .s-meta{font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+.s-dir{font-size:11px;color:var(--purple);margin-top:2px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .s-actions{display:flex;gap:6px;margin-top:8px}
 .s-actions button{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
 .s-actions button:active{background:var(--border)}
 .s-actions button.danger{color:var(--red);border-color:rgba(241,81,73,.3)}
 
-/* Chat view */
-.view-chat{flex:1;display:none;flex-direction:column;overflow:hidden}
+/* View list */
+.view-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* Chat */
+.view-chat{flex:1;display:none;flex-direction:column;overflow:hidden;min-height:0}
 .view-chat.show{display:flex}
 .chat-header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .chat-header .back{background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px}
 .chat-header .info{flex:1;overflow:hidden}
 .chat-header .info .t{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-header .info .s{font-size:11px;color:var(--muted);font-family:monospace}
+.chat-header .info .pc{font-size:10px;color:var(--purple)}
 .chat-header .release-btn{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--yellow);background:rgba(210,153,34,.1);color:var(--yellow);cursor:pointer}
 
-.chat-msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 14px}
-.msg{margin-bottom:12px;max-width:100%}
-.msg.user .bubble{background:rgba(31,111,235,.12);border-left:3px solid var(--accent);border-radius:0 10px 10px 0}
-.msg.assistant .bubble{background:rgba(63,185,80,.06);border-left:3px solid var(--green);border-radius:0 10px 10px 0}
-.msg.tool .bubble{background:rgba(139,148,158,.08);border-left:3px solid var(--muted);border-radius:0 10px 10px 0}
-.msg .bubble{padding:8px 12px;font-size:13px;white-space:pre-wrap;word-break:break-word;border-radius:8px}
-.msg .role{font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px}
+.chat-msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 14px;min-height:0}
+.msg{margin-bottom:10px;max-width:90%;display:flex;flex-direction:column}
+.msg.user{margin-left:auto;align-items:flex-end}
+.msg.assistant,.msg.tool{margin-right:auto;align-items:flex-start}
+.msg.user .bubble{background:rgba(31,111,235,.18);border-radius:12px 12px 4px 12px}
+.msg.assistant .bubble{background:rgba(63,185,80,.08);border-radius:12px 12px 12px 4px}
+.msg.tool .bubble{background:rgba(139,148,158,.08);border-radius:12px 12px 12px 4px}
+.msg .bubble{padding:8px 12px;font-size:13px;white-space:pre-wrap;word-break:break-word;border-radius:12px;overflow-wrap:anywhere}
+.msg .bubble code{font-family:Consolas,monospace;font-size:12px;background:rgba(110,118,129,.2);padding:1px 4px;border-radius:3px}
+.msg .bubble pre{background:rgba(110,118,129,.15);padding:8px;border-radius:6px;overflow-x:auto;margin:4px 0;font-size:12px}
+.msg .bubble pre code{background:none;padding:0}
+.msg .bubble a{color:var(--blue)}
+.msg .role{font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px}
 .msg .time{float:right;font-size:10px;color:var(--muted);margin-left:8px}
-.msg .thinking{font-size:12px;color:var(--muted);font-style:italic;margin-top:6px;padding:6px 8px;background:rgba(139,148,158,.06);border-radius:6px;white-space:pre-wrap}
-.msg .tool-call{font-size:12px;margin-top:6px;padding:6px 8px;background:rgba(139,148,158,.06);border-radius:6px}
+.thinking-loading{display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:12px;color:var(--muted);font-style:italic}
+.thinking-loading .spinner{width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+.msg .tool-call{font-size:12px;margin-top:4px;padding:6px 8px;background:rgba(139,148,158,.06);border-radius:8px;max-width:100%}
 .msg .tool-call .tc-title{font-weight:500;color:var(--blue)}
 .msg .tool-call .tc-status{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:6px}
 .msg .tool-call .tc-status.completed{background:rgba(63,185,80,.15);color:var(--green)}
 .msg .tool-call .tc-status.failed{background:rgba(241,81,73,.15);color:var(--red)}
 .msg .tool-call .tc-status.in_progress{background:rgba(88,166,255,.15);color:var(--blue)}
+.msg .tool-call .tc-status.pending{background:rgba(139,148,158,.15);color:var(--muted)}
 .msg .tool-call .tc-result{margin-top:4px;color:var(--muted);font-family:monospace;font-size:11px;white-space:pre-wrap;max-height:150px;overflow-y:auto}
 
-/* Streaming indicator */
+.permission-card{background:rgba(210,153,34,.1);border:1px solid var(--yellow);border-radius:8px;padding:10px;margin:8px 0;max-width:90%}
+.permission-card .pc-title{font-size:13px;font-weight:500;color:var(--yellow)}
+.permission-card .pc-desc{font-size:12px;color:var(--muted);margin-top:4px}
+.permission-card .pc-actions{display:flex;gap:8px;margin-top:8px}
+.permission-card .pc-actions button{flex:1;padding:6px;border-radius:6px;border:none;font-size:12px;cursor:pointer}
+.permission-card .pc-allow{background:var(--green);color:#fff}
+.permission-card .pc-deny{background:var(--red);color:#fff}
+
+.load-more{text-align:center;padding:10px;color:var(--blue);font-size:13px;cursor:pointer}
+.load-more:active{opacity:.7}
+
 .streaming-indicator{display:none;padding:8px 14px;font-size:12px;color:var(--muted);background:var(--card);border-top:1px solid var(--border)}
 .streaming-indicator.show{display:flex;align-items:center;gap:6px}
 .streaming-indicator .spinner{width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* Input area */
 .chat-input{background:var(--card);border-top:1px solid var(--border);padding:10px 14px;display:flex;gap:8px;flex-shrink:0;padding-bottom:max(10px,env(safe-area-inset-bottom))}
 .chat-input textarea{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;font-family:inherit;resize:none;outline:none;min-height:40px;max-height:120px}
 .chat-input textarea:focus{border-color:var(--accent)}
 .chat-input button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;align-self:flex-end}
 .chat-input button:disabled{opacity:.4}
+.chat-input .stop-btn{background:var(--red);align-self:flex-end}
+.chat-input .stop-btn:active{opacity:.7}
 
-/* New session FAB */
 .fab{position:fixed;bottom:20px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:10;display:flex;align-items:center;justify-content:center}
 
-/* Empty states */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:13px;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90%}
+.toast.show{opacity:1}
+.toast.error{border-color:var(--red);color:var(--red)}
+.toast.success{border-color:var(--green);color:var(--green)}
+
 .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
 
 /* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:none;align-items:center;justify-content:center;padding:20px}
 .modal-overlay.show{display:flex}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:400px;padding:16px}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:400px;padding:16px;max-height:80vh;overflow-y:auto}
 .modal h3{margin:0 0 12px;font-size:16px}
-.modal input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;outline:none;margin-bottom:10px}
-.modal input:focus{border-color:var(--accent)}
-.modal-actions{display:flex;gap:8px}
+.modal label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px;margin-top:10px}
+.modal input,.modal select,.modal textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;outline:none;margin-bottom:4px;font-family:inherit}
+.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:var(--accent)}
+.modal textarea{min-height:60px;resize:vertical}
+.modal-actions{display:flex;gap:8px;margin-top:14px}
 .modal-actions button{flex:1;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer}
 .modal-actions .cancel{background:var(--border);color:var(--text)}
 .modal-actions .ok{background:var(--accent);color:#fff}
+.modal-actions .danger{background:var(--red);color:#fff}
+.modal .pc-list-item{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+.modal .pc-list-item .pc-info{flex:1}
+.modal .pc-list-item .pc-info .n{font-size:14px;font-weight:500}
+.modal .pc-list-item .pc-info .u{font-size:11px;color:var(--muted)}
+.modal .pc-list-item button{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
 </style>
 </head>
 <body>
@@ -118,26 +174,30 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
   <div class="err" id="loginErr"></div>
 </div>
 
-<!-- Lista de sesiones -->
+<div class="conn-status" id="connStatus"></div>
+
 <div class="header" id="listHeader" style="display:none">
   <span class="dot"></span>
   <h1>Devin Mobile</h1>
   <div class="spacer"></div>
   <button class="btn" id="archivedBtn">Archivadas</button>
   <button class="btn" id="refreshBtn">Actualizar</button>
+  <button class="btn" id="pcConfigBtn">PCs</button>
+  <button class="btn" id="pairingBtn">Emparejar</button>
+  <button class="btn" id="logoutBtn">Salir</button>
 </div>
 <div class="view-list" id="sessionListView" style="display:none">
   <div id="sessionList"></div>
 </div>
 <button class="fab" id="newSessionFab" style="display:none">+</button>
 
-<!-- Vista de chat -->
 <div class="view-chat" id="chatView">
   <div class="chat-header">
     <button class="back" id="backBtn">&larr;</button>
     <div class="info">
       <div class="t" id="chatTitle"></div>
       <div class="s" id="chatSessionId"></div>
+      <div class="pc" id="chatPcName"></div>
     </div>
     <button class="release-btn" id="chatReleaseBtn">Liberar</button>
   </div>
@@ -149,45 +209,113 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
   <div class="chat-input">
     <textarea id="chatInput" placeholder="Escribe un mensaje..." rows="1"></textarea>
     <button id="chatSendBtn">Enviar</button>
+    <button id="chatStopBtn" class="stop-btn" style="display:none">Detener</button>
   </div>
 </div>
 
-<!-- Modal generico -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h3 id="modalTitle">Titulo</h3>
-    <input id="modalInput" type="text">
-    <div class="modal-actions">
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions">
       <button class="cancel" id="modalCancel">Cancelar</button>
       <button class="ok" id="modalOk">OK</button>
     </div>
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 </div>
 
 <script>
+// --- Multi-PC config ---
+const PCS_KEY='devin_mobile_pcs';
 const CRED_KEY='devin_mobile_cred';
-let credB64=localStorage.getItem(CRED_KEY)||'';
+let pcs=[];
 let currentSessionId=null;
 let currentSessionTitle='';
+let currentPcId=null;
 let isStreaming=false;
 let refreshTimer=null;
 let archivedMode=false;
+let lastEid=0;
+let isNearBottom=true;
+let pendingPromptText='';
 
 const $=id=>document.getElementById(id);
 
-function authHeaders(){
+// --- PC management ---
+function isCapacitor(){
+  return typeof window.Capacitor!=='undefined'||location.protocol==='capacitor:'||location.protocol==='http:'&&location.hostname==='localhost'&&location.port==='';
+}
+function loadPcs(){
+  try{pcs=JSON.parse(localStorage.getItem(PCS_KEY)||'[]');}catch{pcs=[];}
+  // Si no hay PCs, crear uno por defecto
+  if(!pcs.length){
+    // En navegador web, usar location.origin (mismo host que sirve el dashboard)
+    // En Capacitor (APK), el usuario configurara la URL manualmente
+    const defaultUrl=isCapacitor()?'':location.origin;
+    pcs=[{id:'pc1',name:'Mi PC',url:defaultUrl,credB64:localStorage.getItem(CRED_KEY)||''}];
+    savePcs();
+  }
+}
+function savePcs(){localStorage.setItem(PCS_KEY,JSON.stringify(pcs));}
+function getPc(id){return pcs.find(p=>p.id===id);}
+function currentCredB64(){return localStorage.getItem(CRED_KEY)||'';}
+
+function authHeaders(pcId){
+  const pc=getPc(pcId);
+  const cred=pc?pc.credB64:currentCredB64();
   const h={'Content-Type':'application/json'};
-  if(credB64)h['Authorization']='Basic '+credB64;
+  if(cred)h['Authorization']='Basic '+cred;
+  return h;
+}
+
+function showToast(msg,type=''){
+  const t=$('toast');
+  t.textContent=msg;
+  t.className='toast show '+type;
+  setTimeout(()=>t.className='toast '+type,3000);
+}
+
+function showConnStatus(state){
+  const el=$('connStatus');
+  if(state==='offline'){el.className='conn-status show offline';el.textContent='Sin conexion';}
+  else if(state==='reconnecting'){el.className='conn-status show reconnecting';el.textContent='Reconectando...';}
+  else{el.className='conn-status';}
+}
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function md(text){
+  if(!text)return '';
+  let h=esc(text);
+  h=h.replace(/```(\w*)\n([\s\S]*?)```/g,(m,lang,code)=>`<pre><code>${code}</code></pre>`);
+  h=h.replace(/`([^`]+)`/g,'<code>$1</code>');
+  h=h.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  h=h.replace(/(https?:\/\/[^\s]+)/g,'<a href="$1" target="_blank">$1</a>');
   return h;
 }
 
 // --- Auth ---
 async function checkAuth(){
-  if(!credB64){showLogin();return;}
+  loadPcs();
+  if(!currentCredB64()){
+    showLogin();return;
+  }
+  // Si el primer PC no tiene URL (Capacitor), ir a config de PCs
+  const pc=pcs[0];
+  if(!pc.url){
+    hideLogin();
+    $('listHeader').style.display='flex';
+    $('sessionListView').style.display='block';
+    showPcConfig();
+    showToast('Configura tu PC para empezar','error');
+    return;
+  }
   try{
-    const r=await fetch('/api/health',{headers:authHeaders()});
+    const r=await fetch(pc.url+'/api/health',{headers:authHeaders(pc.id)});
     if(!r.ok)throw new Error();
     hideLogin();showListView();
   }catch{showLogin();}
@@ -200,14 +328,29 @@ $('loginBtn').addEventListener('click',async()=>{
   if(!u||!p){$('loginErr').textContent='Introduce usuario y contrasena';return;}
   $('loginErr').textContent='';$('loginBtn').disabled=true;
   try{
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
-    if(r.ok){credB64=btoa(u+':'+p);localStorage.setItem(CRED_KEY,credB64);hideLogin();showListView();}
+    const pc=pcs[0];
+    const r=await fetch(pc.url+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if(r.ok){
+      const credB64=btoa(u+':'+p);
+      localStorage.setItem(CRED_KEY,credB64);
+      // Aplicar a todos los PCs (asumimos misma credencial)
+      pcs.forEach(p=>p.credB64=credB64);
+      savePcs();
+      hideLogin();showListView();
+    }
     else $('loginErr').textContent='Usuario o contrasena incorrectos';
   }catch(e){$('loginErr').textContent='Error de conexion';}
   $('loginBtn').disabled=false;
 });
 $('passInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click();});
 $('userInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('passInput').focus();});
+
+$('logoutBtn').addEventListener('click',()=>{
+  localStorage.removeItem(CRED_KEY);
+  pcs.forEach(p=>p.credB64='');
+  savePcs();
+  showLogin();
+});
 
 // --- List view ---
 function showListView(){
@@ -217,124 +360,478 @@ function showListView(){
   $('chatView').classList.remove('show');
   loadSessions();
   if(refreshTimer)clearInterval(refreshTimer);
-  refreshTimer=setInterval(loadSessions,10000); // refresh suave cada 10s
+  refreshTimer=setInterval(loadSessions,15000);
 }
 
 async function loadSessions(){
-  try{
-    const url=archivedMode?'/api/sessions/archived':'/api/sessions';
-    const r=await fetch(url,{headers:authHeaders()});
-    if(!r.ok){if(r.status===401){showLogin();return;}throw new Error();}
-    const sessions=await r.json();
-    const list=$('sessionList');
-    if(!sessions.length){list.innerHTML='<div class="empty">No hay sesiones</div>';return;}
-    list.innerHTML=sessions.map(s=>{
-      const cls=s.active?'active':'idle';
-      const label=s.active?'Activa':'Inactiva';
-      const title=esc(s.title||'(sin titulo)');
-      const ago=esc(s.last_activity_ago||'');
-      const model=esc(s.model||'');
-      const dir=esc((s.working_directory||'').replace('C:\\Users\\EduardoBadaRuano','~'));
-      const actions=archivedMode?`
-        <div class="s-actions">
-          <button onclick="unarchiveSession('${s.id}')">Desarchivar</button>
-        </div>`:`
-        <div class="s-actions">
-          <button onclick="renameSession('${s.id}','${esc(s.title||'').replace(/'/g,"\\'")}')">Renombrar</button>
-          <button onclick="archiveSession('${s.id}')" class="danger">Archivar</button>
-        </div>`;
-      return `<div class="session" onclick="openChat('${s.id}','${esc(s.title||'').replace(/'/g,"\\'")}')">
-        <div class="session-row">
-          <span class="s-dot ${cls}"></span>
-          <span class="s-title">${title}</span>
-          <span class="s-badge ${cls}">${label}</span>
-        </div>
-        <div class="s-meta"><span>${ago}</span><span>${model}</span><span>${dir}</span></div>
-        ${actions}
-      </div>`;
-    }).join('');
-  }catch(e){$('sessionList').innerHTML='<div class="empty">Error al cargar</div>';}
+  const list=$('sessionList');
+  if(archivedMode){
+    list.innerHTML='';
+    for(const pc of pcs){
+      try{
+        const r=await fetch(pc.url+'/api/sessions/archived',{headers:authHeaders(pc.id)});
+        if(!r.ok)continue;
+        const sessions=await r.json();
+        if(sessions.length){
+          const group=createPcGroup(pc,sessions,true);
+          list.appendChild(group);
+        }
+      }catch{}
+    }
+    return;
+  }
+
+  list.innerHTML='<div class="empty">Cargando...</div>';
+  // Cargar todos los PCs en paralelo
+  const promises=pcs.map(async pc=>{
+    try{
+      const r=await fetch(pc.url+'/api/sessions',{headers:authHeaders(pc.id)});
+      if(!r.ok)return {pc,sessions:[],offline:true};
+      const sessions=await r.json();
+      return {pc,sessions,offline:false};
+    }catch{
+      return {pc,sessions:[],offline:true};
+    }
+  });
+  const results=await Promise.all(promises);
+  list.innerHTML='';
+  let totalSessions=0;
+  for(const{pc,sessions,offline}of results){
+    totalSessions+=sessions.length;
+    list.appendChild(createPcGroup(pc,sessions,false,offline));
+  }
+  if(totalSessions===0&&results.every(r=>!r.offline)){
+    list.innerHTML='<div class="empty">No hay sesiones</div>';
+  }
 }
 
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function createPcGroup(pc,sessions,archived,offline){
+  const div=document.createElement('div');
+  div.className='pc-group';
+  const header=document.createElement('div');
+  header.className='pc-group-header';
+  const dotCls=offline?'offline':'';
+  header.innerHTML=`<span class="pc-dot ${dotCls}"></span>
+    <span class="pc-name">${esc(pc.name)}</span>
+    <span class="pc-count">${offline?'(sin conexion)':sessions.length+' sesiones'}</span>
+    <span class="pc-edit" onclick="event.stopPropagation();editPc('${pc.id}')">Editar</span>`;
+  const body=document.createElement('div');
+  body.className='pc-group-body show';
+  if(archived){
+    for(const s of sessions){
+      body.appendChild(createSessionCard(s,pc,true));
+    }
+  }else{
+    for(const s of sessions){
+      body.appendChild(createSessionCard(s,pc,false));
+    }
+  }
+  header.onclick=()=>body.classList.toggle('show');
+  div.appendChild(header);
+  div.appendChild(body);
+  return div;
+}
 
-$('refreshBtn').addEventListener('click',loadSessions);
-$('archivedBtn').addEventListener('click',()=>{
-  archivedMode=!archivedMode;
-  $('archivedBtn').textContent=archivedMode?'Volver':'Archivadas';
+function createSessionCard(s,pc,archived){
+  const div=document.createElement('div');
+  div.className='session';
+  const cls=s.active?'active':'idle';
+  const mobileActive=s.mobile_active;
+  const dotCls=mobileActive?'mobile':cls;
+  const label=s.active?'Activa':'Inactiva';
+  const title=esc(s.title||'(sin titulo)');
+  const ago=esc(s.last_activity_ago||'');
+  const model=esc(s.model||'');
+  const dir=esc((s.working_directory||'').replace(/C:\\Users\\[^\\]+/,'~'));
+  const actions=archived?`
+    <div class="s-actions">
+      <button onclick="event.stopPropagation();unarchiveSession('${pc.id}','${s.id}')">Desarchivar</button>
+    </div>`:`
+    <div class="s-actions">
+      <button onclick="event.stopPropagation();renameSession('${pc.id}','${s.id}','${esc(s.title||'').replace(/'/g,"\\'")}')">Renombrar</button>
+      <button onclick="event.stopPropagation();archiveSession('${pc.id}','${s.id}')" class="danger">Archivar</button>
+    </div>`;
+  div.innerHTML=`
+    <div class="session-row">
+      <span class="s-dot ${dotCls}"></span>
+      <span class="s-title">${title}</span>
+      <span class="s-badge ${cls}">${label}</span>
+    </div>
+    <div class="s-meta"><span>${ago}</span><span>${model}</span></div>
+    <div class="s-dir">${dir}</div>
+    ${actions}`;
+  div.onclick=()=>openChat(pc.id,s.id,s.title||'(sin titulo)');
+  return div;
+}
+
+// --- PC config ---
+$('pcConfigBtn').addEventListener('click',showPcConfig);
+$('pairingBtn').addEventListener('click',showPairing);
+
+async function showPairing(){
+  // Obtener info de emparejamiento del primer PC
+  const pc=pcs[0];
+  try{
+    const r=await fetch(pc.url+'/api/pairing',{headers:authHeaders(pc.id)});
+    if(!r.ok){showToast('Error al obtener info de emparejamiento','error');return;}
+    const data=await r.json();
+    // Generar QR code usando API publica
+    const qrData=JSON.stringify({name:data.name,urls:data.urls,username:data.username});
+    const qrUrl='https://api.qrserver.com/v1/create-qr-code/?size=300x300&data='+encodeURIComponent(qrData);
+    const body=$('modalBody');
+    body.innerHTML=`
+      <div style="text-align:center">
+        <p style="color:var(--muted);font-size:12px;margin:0 0 12px">Escanea este codigo QR desde otro movil para configurarlo automaticamente</p>
+        <img src="${qrUrl}" alt="QR" style="width:280px;height:280px;border-radius:12px;background:#fff;padding:10px">
+        <div style="margin-top:12px;font-size:13px;color:var(--text);font-weight:500">${esc(data.name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;font-family:monospace">${esc(data.urls.join(' | '))}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Usuario: ${esc(data.username)}</div>
+        <div style="margin-top:16px">
+          <button type="button" onclick="copyPairingInfo(${JSON.stringify(qrData).replace(/"/g,'&quot;')})" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);cursor:pointer;font-size:13px">Copiar configuracion</button>
+        </div>
+      </div>`;
+    $('modalTitle').textContent='Emparejar movil';
+    $('modalActions').style.display='none';
+    $('modalOverlay').classList.add('show');
+  }catch(e){showToast('Error de conexion','error');}
+}
+
+function copyPairingInfo(data){
+  // Crear un input temporal y copiar
+  const ta=document.createElement('textarea');
+  ta.value=data;
+  document.body.appendChild(ta);
+  ta.select();
+  try{
+    document.execCommand('copy');
+    showToast('Configuracion copiada al portapapeles','success');
+  }catch(e){showToast('No se pudo copiar','error');}
+  document.body.removeChild(ta);
+}
+
+function showPcConfig(){
+  const body=$('modalBody');
+  body.innerHTML='<p style="color:var(--muted);font-size:12px;margin:0 0 10px">Configura tus PCs. Cada PC necesita su propio servidor Devin Mobile corriendo.</p>';
+  for(const pc of pcs){
+    body.innerHTML+=`<div class="pc-list-item">
+      <div class="pc-info"><div class="n">${esc(pc.name)}</div><div class="u">${esc(pc.url)}</div></div>
+      <button onclick="editPc('${pc.id}')">Editar</button>
+      <button onclick="deletePc('${pc.id}')">Borrar</button>
+    </div>`;
+  }
+  body.innerHTML+='<button class="btn" style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer" onclick="addPc()">+ Anadir PC</button>';
+  $('modalTitle').textContent='Configuracion de PCs';
+  $('modalActions').style.display='none';
+  $('modalOverlay').classList.add('show');
+}
+
+function addPc(){
+  const body=$('modalBody');
+  body.innerHTML=`
+    <label>Nombre del PC</label>
+    <input id="newPcName" type="text" placeholder="ej: PC Oficina" value="">
+    <label>URL del servidor</label>
+    <input id="newPcUrl" type="text" placeholder="ej: http://100.x.y.z:8787" value="">
+    <label>Usuario</label>
+    <input id="newPcUser" type="text" placeholder="usuario" value="">
+    <label>Contrasena</label>
+    <input id="newPcPass" type="password" placeholder="contrasena" value="">`;
+  $('modalActions').style.display='flex';
+  $('modalOk').textContent='Anadir';
+  $('modalOk').onclick=()=>{
+    const name=$('newPcName').value.trim();
+    const url=$('newPcUrl').value.trim().replace(/\/$/,'');
+    const user=$('newPcUser').value.trim();
+    const pass=$('newPcPass').value;
+    if(!name||!url){showToast('Falta nombre o URL','error');return;}
+    const credB64=user&&pass?btoa(user+':'+pass):currentCredB64();
+    pcs.push({id:'pc'+Date.now(),name,url,credB64});
+    savePcs();
+    $('modalOverlay').classList.remove('show');
+    showPcConfig();
+    loadSessions();
+  };
+}
+
+function editPc(id){
+  const pc=getPc(id);
+  if(!pc)return;
+  const body=$('modalBody');
+  const cred=pc.credB64?atob(pc.credB64):':';
+  const [user,pass]=cred.split(':');
+  body.innerHTML=`
+    <label>Nombre del PC</label>
+    <input id="editPcName" type="text" value="${esc(pc.name)}">
+    <label>URL del servidor</label>
+    <input id="editPcUrl" type="text" value="${esc(pc.url)}">
+    <label>Usuario</label>
+    <input id="editPcUser" type="text" value="${esc(user)}">
+    <label>Contrasena</label>
+    <input id="editPcPass" type="password" value="${esc(pass)}" placeholder="(sin cambios)">`;
+  $('modalActions').style.display='flex';
+  $('modalOk').textContent='Guardar';
+  $('modalOk').onclick=()=>{
+    pc.name=$('editPcName').value.trim()||pc.name;
+    pc.url=$('editPcUrl').value.trim().replace(/\/$/,'')||pc.url;
+    const u=$('editPcUser').value.trim();
+    const p=$('editPcPass').value;
+    if(u&&p)pc.credB64=btoa(u+':'+p);
+    savePcs();
+    $('modalOverlay').classList.remove('show');
+    showPcConfig();
+    loadSessions();
+  };
+}
+
+function deletePc(id){
+  if(pcs.length<=1){showToast('No puedes borrar el ultimo PC','error');return;}
+  pcs=pcs.filter(p=>p.id!==id);
+  savePcs();
+  showPcConfig();
   loadSessions();
-});
+}
 
 // --- Session actions ---
-async function renameSession(id,currentTitle){
-  showModal('Renombrar sesion',currentTitle,async(newTitle)=>{
+async function renameSession(pcId,id,currentTitle){
+  showModalInput('Renombrar sesion',currentTitle,async(newTitle)=>{
     if(!newTitle)return;
-    await fetch(`/api/sessions/${id}/rename`,{method:'POST',headers:authHeaders(),body:JSON.stringify({title:newTitle})});
+    try{
+      const r=await fetch(getPc(pcId).url+`/api/sessions/${id}/rename`,{method:'POST',headers:authHeaders(pcId),body:JSON.stringify({title:newTitle})});
+      if(r.ok)showToast('Renombrado','success');
+      else showToast('Error al renombrar','error');
+    }catch(e){showToast('Error de conexion','error');}
     loadSessions();
   });
 }
-async function archiveSession(id){
-  await fetch(`/api/sessions/${id}/archive`,{method:'POST',headers:authHeaders()});
+
+async function archiveSession(pcId,id){
+  try{
+    const r=await fetch(getPc(pcId).url+`/api/sessions/${id}/archive`,{method:'POST',headers:authHeaders(pcId)});
+    if(r.ok)showToast('Archivada','success');
+  }catch(e){showToast('Error','error');}
   loadSessions();
 }
-async function unarchiveSession(id){
-  await fetch(`/api/sessions/${id}/unarchive`,{method:'POST',headers:authHeaders()});
+
+async function unarchiveSession(pcId,id){
+  try{
+    const r=await fetch(getPc(pcId).url+`/api/sessions/${id}/unarchive`,{method:'POST',headers:authHeaders(pcId)});
+    if(r.ok)showToast('Desarchivada','success');
+  }catch(e){showToast('Error','error');}
   loadSessions();
 }
 
 // --- New session ---
-$('newSessionFab').addEventListener('click',()=>{
-  showModal('Nueva sesion','',async(prompt)=>{
-    if(!prompt)return;
-    $('newSessionFab').disabled=true;
-    const r=await fetch('/api/sessions/new',{method:'POST',headers:authHeaders(),body:JSON.stringify({prompt})});
-    const data=await r.json();
-    $('newSessionFab').disabled=false;
-    if(data.ok&&data.session_id){
-      openChat(data.session_id,data.title||'Nueva sesion');
-    }else{
-      alert('Error: '+(data.error||'no se pudo crear'));
-    }
+$('newSessionFab').addEventListener('click',showNewSessionDialog);
+
+async function showNewSessionDialog(){
+  const body=$('modalBody');
+  body.innerHTML=`
+    <label>PC</label>
+    <select id="newSessPc">${pcs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+    <label>Directorio de trabajo</label>
+    <div style="display:flex;gap:6px">
+      <input id="newSessDir" type="text" placeholder="ej: C:\\Users\\Tu\\Proyecto" style="flex:1">
+      <button type="button" onclick="openDirBrowser()" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);cursor:pointer;font-size:13px">Examinar</button>
+    </div>
+    <label>Prompt inicial</label>
+    <textarea id="newSessPrompt" placeholder="Que quieres que haga Devin?"></textarea>`;
+  $('modalTitle').textContent='Nueva sesion';
+  $('modalActions').style.display='flex';
+  $('modalOk').textContent='Crear';
+  $('modalOk').onclick=async()=>{
+    const pcId=$('newSessPc').value;
+    const cwd=$('newSessDir').value.trim();
+    const prompt=$('newSessPrompt').value.trim();
+    if(!prompt){showToast('Prompt vacio','error');return;}
+    $('modalOverlay').classList.remove('show');
+    const pc=getPc(pcId);
+    try{
+      const r=await fetch(pc.url+'/api/sessions/new',{method:'POST',headers:authHeaders(pcId),body:JSON.stringify({prompt,cwd})});
+      const data=await r.json();
+      if(data.ok&&data.session_id){
+        openChat(pcId,data.session_id,data.title||'Nueva sesion');
+      }else{
+        showToast('Error: '+(data.error||'no se pudo crear'),'error');
+      }
+    }catch(e){showToast('Error de conexion','error');}
     loadSessions();
+  };
+  // Cargar directorios del PC seleccionado para el input
+  $('newSessPc').onchange=async()=>{
+    const pcId=$('newSessPc').value;
+    const pc=getPc(pcId);
+    try{
+      const r=await fetch(pc.url+'/api/directories',{headers:authHeaders(pcId)});
+      if(r.ok){
+        const dirs=await r.json();
+        const input=$('newSessDir');
+        // Crear datalist si no existe
+        let dl=document.getElementById('dirList');
+        if(!dl){
+          dl=document.createElement('datalist');
+          dl.id='dirList';
+          input.setAttribute('list','dirList');
+          document.body.appendChild(dl);
+        }
+        dl.innerHTML=dirs.map(d=>`<option value="${esc(d)}">`).join('');
+      }
+    }catch{}
+  };
+  $('newSessPc').onchange();
+  $('modalOverlay').classList.add('show');
+  setTimeout(()=>$('newSessPrompt').focus(),100);
+}
+
+// --- Directory browser ---
+let dirBrowserCallback=null;
+let dirBrowserPcId=null;
+
+async function openDirBrowser(){
+  dirBrowserPcId=$('newSessPc')?$('newSessPc').value:currentPcId;
+  dirBrowserCallback=(path)=>{
+    if($('newSessDir'))$('newSessDir').value=path;
+  };
+  await browseDir(null);
+}
+
+async function browseDir(path){
+  const pc=getPc(dirBrowserPcId);
+  try{
+    let url=pc.url+'/api/browse';
+    if(path)url+='?path='+encodeURIComponent(path);
+    const r=await fetch(url,{headers:authHeaders(dirBrowserPcId)});
+    if(!r.ok){showToast('Error al navegar','error');return;}
+    const data=await r.json();
+    renderDirBrowser(data);
+  }catch(e){showToast('Error de conexion','error');}
+}
+
+function renderDirBrowser(data){
+  const body=$('modalBody');
+  let html=`<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:10px;font-size:12px;font-family:monospace;color:var(--muted);word-break:break-all">${esc(data.path||'(Mi PC)')}</div>`;
+  // Boton crear directorio
+  html+=`<button type="button" onclick="createDirPrompt()" style="width:100%;padding:8px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer;font-size:13px;margin-bottom:10px">+ Crear directorio nuevo</button>`;
+  // Parent
+  if(data.parent!==null&&data.parent!==undefined){
+    html+=`<div class="dir-item" onclick="browseDir('${esc(data.parent).replace(/'/g,"\\'")}')" style="padding:10px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:14px;color:var(--muted)">.. (subir)</div>`;
+  }
+  // Items
+  if(!data.items||!data.items.length){
+    html+='<div class="empty" style="padding:20px">No hay subdirectorios</div>';
+  }else{
+    for(const item of data.items){
+      const icon=item.type==='drive'?'[Drive]':'[Carpeta]';
+      html+=`<div class="dir-item" onclick="browseDir('${esc(item.path).replace(/'/g,"\\'")}')" style="padding:10px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px">
+        <span style="color:var(--blue);font-size:12px">${icon}</span>
+        <span>${esc(item.name)}</span>
+      </div>`;
+    }
+  }
+  body.innerHTML=html;
+  $('modalTitle').textContent='Examinar directorio';
+  $('modalActions').style.display='flex';
+  $('modalOk').textContent='Seleccionar';
+  $('modalOk').onclick=()=>{
+    if(dirBrowserCallback&&data.path){
+      dirBrowserCallback(data.path);
+    }
+    $('modalOverlay').classList.remove('show');
+    dirBrowserCallback=null;
+  };
+}
+
+async function createDirPrompt(){
+  const currentPath=$('modalBody').querySelector('div[style*="monospace"]');
+  const basePath=currentPath?currentPath.textContent:'';
+  if(!basePath){showToast('Selecciona un directorio primero','error');return;}
+  showModalInput('Crear directorio','',async(name)=>{
+    if(!name)return;
+    const fullPath=basePath.replace(/\\/g,'\\')+'\\'+name;
+    const pc=getPc(dirBrowserPcId);
+    try{
+      const r=await fetch(pc.url+'/api/mkdir',{method:'POST',headers:authHeaders(dirBrowserPcId),body:JSON.stringify({path:fullPath})});
+      if(r.ok){
+        showToast('Directorio creado','success');
+        browseDir(basePath); // refrescar
+      }else{
+        const err=await r.json();
+        showToast('Error: '+(err.detail||'no se pudo crear'),'error');
+      }
+    }catch(e){showToast('Error de conexion','error');}
   });
-});
+}
 
 // --- Chat view ---
-function openChat(id,title){
+function openChat(pcId,id,title){
   currentSessionId=id;
   currentSessionTitle=title;
+  currentPcId=pcId;
+  lastEid=0;
+  isNearBottom=true;
+  const pc=getPc(pcId);
   $('chatTitle').textContent=title;
   $('chatSessionId').textContent=id;
+  $('chatPcName').textContent=pc.name;
   $('chatView').classList.add('show');
   $('listHeader').style.display='none';
   $('sessionListView').style.display='none';
   $('newSessionFab').style.display='none';
   if(refreshTimer)clearInterval(refreshTimer);
   $('chatMsgs').innerHTML='<div class="empty">Cargando historial...</div>';
-  loadHistory(id);
+  $('chatMsgs').addEventListener('scroll',()=>{
+    const c=$('chatMsgs');
+    isNearBottom=c.scrollHeight-c.scrollTop-c.clientHeight<80;
+  });
+  loadHistory(pcId,id);
 }
 
-async function loadHistory(id){
+async function loadHistory(pcId,id,beforeNode){
+  const pc=getPc(pcId);
   try{
-    const r=await fetch(`/api/sessions/${id}/history`,{headers:authHeaders()});
+    let url=pc.url+`/api/sessions/${id}/history?limit=200`;
+    if(beforeNode)url+=`&before=${beforeNode}`;
+    const r=await fetch(url,{headers:authHeaders(pcId)});
     if(!r.ok)throw new Error();
-    const msgs=await r.json();
+    const data=await r.json();
+    const msgs=data.messages||[];
     const container=$('chatMsgs');
-    if(!msgs.length){container.innerHTML='<div class="empty">Sin mensajes previos</div>';return;}
-    container.innerHTML=msgs.map(m=>renderMessage(m)).join('');
+    if(!beforeNode){
+      if(!msgs.length){container.innerHTML='<div class="empty">Sin mensajes previos</div>';return;}
+      container.innerHTML=msgs.map(m=>renderMessage(m)).join('');
+    }else{
+      const oldHtml=msgs.map(m=>renderMessage(m)).join('');
+      const loadMore=container.querySelector('.load-more');
+      if(loadMore)loadMore.remove();
+      container.insertAdjacentHTML('afterbegin',oldHtml);
+      if(data.has_more){
+        container.insertAdjacentHTML('afterbegin',`<div class="load-more" onclick="loadMoreHistory()">Cargar mas mensajes</div>`);
+      }
+    }
+    if(data.has_more&&!beforeNode){
+      container.insertAdjacentHTML('afterbegin',`<div class="load-more" onclick="loadMoreHistory()">Cargar mas mensajes</div>`);
+    }
     container.scrollTop=container.scrollHeight;
   }catch(e){$('chatMsgs').innerHTML='<div class="empty">Error al cargar historial</div>';}
+}
+
+async function loadMoreHistory(){
+  const msgs=$('chatMsgs').querySelectorAll('.msg');
+  if(!msgs.length)return;
+  const first=msgs[0];
+  const nodeId=first.getAttribute('data-node-id');
+  if(!nodeId)return;
+  loadHistory(currentPcId,currentSessionId,parseInt(nodeId));
 }
 
 function renderMessage(m){
   const role=m.role==='user'?'Tu':m.role==='assistant'?'Devin':'Sistema';
   const time=m.time?`<span class="time">${m.time}</span>`:'';
-  let html=`<div class="msg ${m.role}"><div class="role">${role}${time}</div>`;
-  if(m.content)html+=`<div class="bubble">${esc(m.content)}</div>`;
-  if(m.thinking)html+=`<div class="thinking">💭 ${esc(m.thinking)}</div>`;
+  const nodeId=m.node_id?`data-node-id="${m.node_id}"`:'';
+  let html=`<div class="msg ${m.role}" ${nodeId}><div class="role">${role}${time}</div>`;
+  if(m.content)html+=`<div class="bubble">${md(m.content)}</div>`;
   if(m.tool_calls){
     for(const tc of m.tool_calls){
-      const statusCls=tc.status||'';
+      const statusCls=tc.status||'pending';
       html+=`<div class="tool-call">
         <span class="tc-title">${esc(tc.name)}</span>
         <span class="tc-status ${statusCls}">${esc(tc.status||'')}</span>
@@ -353,15 +850,17 @@ $('backBtn').addEventListener('click',()=>{
 });
 
 $('chatReleaseBtn').addEventListener('click',async()=>{
+  const pc=getPc(currentPcId);
   $('chatReleaseBtn').disabled=true;
   try{
-    await fetch(`/api/sessions/${currentSessionId}/release`,{method:'POST',headers:authHeaders()});
-    $('chatReleaseBtn').textContent='OK';
+    const r=await fetch(pc.url+`/api/sessions/${currentSessionId}/release`,{method:'POST',headers:authHeaders(currentPcId)});
+    if(r.ok){$('chatReleaseBtn').textContent='OK';showToast('Sesion liberada','success');}
+    else{$('chatReleaseBtn').textContent='Error';showToast('Error al liberar','error');}
     setTimeout(()=>{$('chatReleaseBtn').textContent='Liberar';$('chatReleaseBtn').disabled=false;},1500);
   }catch(e){$('chatReleaseBtn').textContent='Error';setTimeout(()=>{$('chatReleaseBtn').textContent='Liberar';$('chatReleaseBtn').disabled=false;},1500);}
 });
 
-// --- Send prompt with streaming ---
+// --- Send prompt ---
 $('chatSendBtn').addEventListener('click',sendPrompt);
 $('chatInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendPrompt();}
@@ -371,33 +870,55 @@ async function sendPrompt(){
   const text=$('chatInput').value.trim();
   if(!text||!currentSessionId||isStreaming)return;
   $('chatInput').value='';
+  pendingPromptText=text;
   isStreaming=true;
-  $('chatSendBtn').disabled=true;
-
-  // Mostrar mensaje del usuario inmediatamente
+  $('chatSendBtn').style.display='none';
+  $('chatStopBtn').style.display='block';
+  showConnStatus('reconnecting');
   const container=$('chatMsgs');
-  container.innerHTML+=renderMessage({role:'user',content:text,time:''});
-  container.scrollTop=container.scrollHeight;
+  if(container.querySelector('.empty'))container.innerHTML='';
+  container.insertAdjacentHTML('beforeend',renderMessage({role:'user',content:text,time:''}));
+  scrollToBottom();
+  await startStream(text,false);
+}
 
-  // Crear div para respuesta streaming
+async function startStream(text,force){
+  const pc=getPc(currentPcId);
+  const container=$('chatMsgs');
   const respId='stream-'+Date.now();
-  container.innerHTML+=`<div class="msg assistant" id="${respId}"><div class="role">Devin</div><div class="bubble" id="${respId}-content"></div><div class="thinking" id="${respId}-thinking" style="display:none"></div><div id="${respId}-tools"></div></div>`;
-  container.scrollTop=container.scrollHeight;
-
+  container.insertAdjacentHTML('beforeend',`<div class="msg assistant" id="${respId}">
+    <div class="role">Devin</div>
+    <div class="bubble" id="${respId}-content"></div>
+    <div class="thinking-loading" id="${respId}-thinking" style="display:none">
+      <div class="spinner"></div><span>Pensando...</span>
+    </div>
+    <div id="${respId}-tools"></div>
+    <div id="${respId}-permissions"></div>
+  </div>`);
+  scrollToBottom();
   const indicator=$('streamingIndicator');
   indicator.classList.add('show');
   $('streamingText').textContent='Devin esta trabajando...';
-
-  let contentBuf='',thinkingBuf='';
-  const tools={};
-
+  const state={contentBuf:'',isThinking:false,tools:{}};
+  const ctrl=new AbortController();
+  $('chatStopBtn').onclick=async()=>{
+    ctrl.abort();
+    try{await fetch(pc.url+`/api/sessions/${currentSessionId}/cancel`,{method:'POST',headers:authHeaders(currentPcId)});}catch(e){}
+  };
   try{
-    const url=`/api/sessions/${currentSessionId}/stream?prompt=${encodeURIComponent(text)}`;
-    const resp=await fetch(url,{headers:authHeaders()});
+    let url=pc.url+`/api/sessions/${currentSessionId}/stream?prompt=${encodeURIComponent(text)}`;
+    if(force)url+='&force=1';
+    const resp=await fetch(url,{headers:{...authHeaders(currentPcId),'Last-Event-ID':String(lastEid)},signal:ctrl.signal});
+    showConnStatus('');
+    if(!resp.ok){
+      const errEl=$(respId+'-content');
+      errEl.textContent='Error HTTP '+resp.status;
+      errEl.style.color='var(--red)';
+      throw new Error('HTTP '+resp.status);
+    }
     const reader=resp.body.getReader();
     const decoder=new TextDecoder();
     let buffer='';
-
     while(true){
       const{done,value}=await reader.read();
       if(done)break;
@@ -405,58 +926,84 @@ async function sendPrompt(){
       const lines=buffer.split('\n');
       buffer=lines.pop();
       for(const line of lines){
+        if(line.startsWith('id: ')){
+          const eid=parseInt(line.slice(4));
+          if(eid>lastEid)lastEid=eid;
+          continue;
+        }
+        if(line.startsWith(': '))continue;
         if(!line.startsWith('data: '))continue;
         try{
           const evt=JSON.parse(line.slice(6));
-          handleStreamEvent(evt,respId,tools);
-        }catch(e){}
+          handleStreamEvent(evt,respId,state);
+        }catch(e){console.error('Event parse error:',e,line);}
       }
     }
   }catch(e){
-    console.error('Stream error:',e);
+    if(e.name==='AbortError'){
+      const el=$(respId+'-content');
+      if(!el.textContent)el.textContent='(detenido)';
+      const th=$(respId+'-thinking');th.style.display='none';
+      showConnStatus('');
+    }else{
+      console.error('Stream error:',e);
+      showConnStatus('offline');
+      setTimeout(()=>showConnStatus(''),3000);
+    }
   }
-
   isStreaming=false;
+  $('chatSendBtn').style.display='block';
+  $('chatStopBtn').style.display='none';
   $('chatSendBtn').disabled=false;
   indicator.classList.remove('show');
-  // Recargar historial completo para tener los datos finales
-  setTimeout(()=>loadHistory(currentSessionId),1500);
+  setTimeout(()=>{if(currentSessionId)loadHistory(currentPcId,currentSessionId);},2000);
 }
 
-function handleStreamEvent(evt,respId,tools){
+function handleStreamEvent(evt,respId,state){
   const contentEl=$(respId+'-content');
   const thinkingEl=$(respId+'-thinking');
   const toolsEl=$(respId+'-tools');
-
+  const permEl=$(respId+'-permissions');
+  const tools=state.tools;
   if(evt.type==='status'){
     $('streamingText').textContent=evt.message;
+  }else if(evt.type==='handoff_confirm'){
+    $('streamingText').textContent='Sesion activa en el IDE';
+    contentEl.innerHTML=`<div style="padding:10px;background:rgba(210,153,34,.1);border:1px solid var(--yellow);border-radius:8px;font-size:12px;color:var(--yellow)">
+      <div style="font-weight:500;margin-bottom:6px">Sesion activa en Devin Desktop</div>
+      <div style="color:var(--muted);margin-bottom:8px">${esc(evt.message||'')}</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="confirmHandoff(true)" style="flex:1;padding:6px;border:none;border-radius:6px;background:var(--yellow);color:#000;cursor:pointer;font-size:12px">Si, tomar control</button>
+        <button onclick="confirmHandoff(false)" style="flex:1;padding:6px;border:none;border-radius:6px;background:var(--border);color:var(--text);cursor:pointer;font-size:12px">Cancelar</button>
+      </div></div>`;
+    isStreaming=false;
+    $('chatSendBtn').style.display='block';
+    $('chatStopBtn').style.display='none';
+    $('streamingIndicator').classList.remove('show');
   }else if(evt.type==='handoff'){
     $('streamingText').textContent='Tomando control de la sesion...';
   }else if(evt.type==='update'){
     const kind=evt.kind;
     if(kind==='agent_message_chunk'){
-      contentBuf+=evt.content;
-      contentEl.textContent=contentBuf;
-      scrollToBottom();
+      if(state.isThinking){thinkingEl.style.display='none';state.isThinking=false;}
+      state.contentBuf+=evt.content||'';
+      contentEl.innerHTML=md(state.contentBuf);
+      if(isNearBottom)scrollToBottom();
     }else if(kind==='agent_message'){
-      contentBuf=evt.content;
-      contentEl.textContent=contentBuf;
-      scrollToBottom();
-    }else if(kind==='agent_thought_chunk'){
-      thinkingBuf+=evt.thinking;
-      thinkingEl.textContent=thinkingBuf;
-      thinkingEl.style.display='block';
-      scrollToBottom();
-    }else if(kind==='agent_thought'){
-      thinkingBuf=evt.thinking;
-      thinkingEl.textContent=thinkingBuf;
-      thinkingEl.style.display='block';
-    }else if(kind==='tool_call_update'){
+      if(state.isThinking){thinkingEl.style.display='none';state.isThinking=false;}
+      state.contentBuf=evt.content||'';
+      contentEl.innerHTML=md(state.contentBuf);
+      if(isNearBottom)scrollToBottom();
+    }else if(kind==='agent_thought_chunk'||kind==='agent_thought'){
+      if(!state.isThinking){thinkingEl.style.display='flex';state.isThinking=true;}
+      $('streamingText').textContent='Pensando...';
+    }else if(kind==='tool_call'||kind==='tool_call_update'){
+      if(state.isThinking){thinkingEl.style.display='none';state.isThinking=false;}
       const tid=evt.tool_call_id;
       if(!tools[tid])tools[tid]={};
-      tools[tid].title=evt.title;
-      tools[tid].status=evt.status;
-      tools[tid].name=evt.kind_tool;
+      if(evt.title)tools[tid].title=evt.title;
+      if(evt.status)tools[tid].status=evt.status;
+      if(evt.kind_tool)tools[tid].name=evt.kind_tool;
       updateTools(toolsEl,tools);
       $('streamingText').textContent=`Ejecutando: ${evt.title||evt.kind_tool||'tool'}`;
     }else if(kind==='tool_call_content_chunk'){
@@ -465,28 +1012,52 @@ function handleStreamEvent(evt,respId,tools){
       tools[tid].result=(tools[tid].result||'')+evt.content;
       updateTools(toolsEl,tools);
     }else if(kind==='state_update'){
-      if(evt.state==='running'){
-        $('streamingText').textContent='Devin esta trabajando...';
-      }else if(evt.state==='idle'){
-        $('streamingText').textContent='Completado';
-      }
-    }else if(kind==='user_message'){
-      // Ignorar - ya lo mostramos
+      if(state.isThinking){thinkingEl.style.display='none';state.isThinking=false;}
+      if(evt.state==='running')$('streamingText').textContent='Devin esta trabajando...';
+      else if(evt.state==='idle')$('streamingText').textContent='Completado';
+    }else if(kind==='user_message'){}else if(kind==='session_info_update'){
+      if(evt.title)$('chatTitle').textContent=evt.title;
     }
-  }else if(evt.type==='done'){
-    $('streamingText').textContent='Completado';
-  }else if(evt.type==='released'){
-    // Sesion liberada
-  }else if(evt.type==='error'){
+  }else if(evt.type==='done'){$('streamingText').textContent='Completado';
+  }else if(evt.type==='released'){}else if(evt.type==='error'){
     contentEl.textContent='Error: '+evt.message;
     contentEl.style.color='var(--red)';
+    showToast(evt.message,'error');
   }
+}
+
+async function confirmHandoff(confirm){
+  if(!confirm){
+    const msgs=$('chatMsgs');
+    const lastMsg=msgs.lastElementChild;
+    if(lastMsg)lastMsg.remove();
+    return;
+  }
+  if(!pendingPromptText)return;
+  const text=pendingPromptText;
+  pendingPromptText='';
+  const msgs=$('chatMsgs');
+  const lastMsg=msgs.lastElementChild;
+  if(lastMsg)lastMsg.remove();
+  isStreaming=true;
+  $('chatSendBtn').style.display='none';
+  $('chatStopBtn').style.display='block';
+  await startStream(text,true);
+}
+
+async function respondPermission(callId,outcome,cardId){
+  const pc=getPc(currentPcId);
+  try{
+    await fetch(pc.url+`/api/sessions/${currentSessionId}/permission`,{method:'POST',headers:authHeaders(currentPcId),body:JSON.stringify({call_id:callId,outcome:outcome})});
+    const card=document.getElementById(cardId);
+    if(card)card.remove();
+  }catch(e){showToast('Error al responder permiso','error');}
 }
 
 function updateTools(el,tools){
   let html='';
   for(const[tid,tc]of Object.entries(tools)){
-    const statusCls=tc.status||'';
+    const statusCls=tc.status||'pending';
     html+=`<div class="tool-call">
       <span class="tc-title">${esc(tc.name||'tool')}</span>
       <span class="tc-status ${statusCls}">${esc(tc.status||'')}</span>
@@ -495,33 +1066,36 @@ function updateTools(el,tools){
     </div>`;
   }
   el.innerHTML=html;
-  scrollToBottom();
+  if(isNearBottom)scrollToBottom();
 }
 
-function scrollToBottom(){
-  const c=$('chatMsgs');
-  c.scrollTop=c.scrollHeight;
-}
+function scrollToBottom(){const c=$('chatMsgs');c.scrollTop=c.scrollHeight;}
 
 // --- Modal ---
 let modalCallback=null;
-function showModal(title,defaultText,callback){
-  modalCallback=callback;
+function showModalInput(title,defaultText,callback){
+  const body=$('modalBody');
+  body.innerHTML=`<input id="modalInput" type="text" value="${esc(defaultText)}">`;
   $('modalTitle').textContent=title;
-  $('modalInput').value=defaultText;
+  $('modalActions').style.display='flex';
+  $('modalOk').textContent='OK';
+  $('modalOk').onclick=()=>{
+    const val=$('modalInput').value.trim();
+    $('modalOverlay').classList.remove('show');
+    if(callback)callback(val);
+  };
   $('modalOverlay').classList.add('show');
   setTimeout(()=>$('modalInput').focus(),100);
 }
-$('modalOk').addEventListener('click',()=>{
-  const val=$('modalInput').value.trim();
-  $('modalOverlay').classList.remove('show');
-  if(modalCallback){modalCallback(val);modalCallback=null;}
+$('modalCancel').addEventListener('click',()=>{$('modalOverlay').classList.remove('show');});
+$('modalInput')&&$('modalInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('modalOk').click();});
+
+$('refreshBtn').addEventListener('click',loadSessions);
+$('archivedBtn').addEventListener('click',()=>{
+  archivedMode=!archivedMode;
+  $('archivedBtn').textContent=archivedMode?'Volver':'Archivadas';
+  loadSessions();
 });
-$('modalCancel').addEventListener('click',()=>{
-  $('modalOverlay').classList.remove('show');
-  modalCallback=null;
-});
-$('modalInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('modalOk').click();});
 
 // --- Init ---
 checkAuth();

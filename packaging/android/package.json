@@ -1,0 +1,22 @@
+{
+  "name": "devin-mobile-app",
+  "version": "3.1.0",
+  "description": "Devin Mobile Dashboard - Controla tus sesiones de Devin desde el movil",
+  "scripts": {
+    "build": "node copy-assets.js",
+    "sync": "npx cap sync android",
+    "open": "npx cap open android",
+    "build:apk": "node copy-assets.js && npx cap sync android && cd android && ./gradlew assembleDebug",
+    "build:release": "node copy-assets.js && npx cap sync android && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0"
+  }
+}

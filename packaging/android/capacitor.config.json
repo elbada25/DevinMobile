@@ -1,0 +1,21 @@
+{
+  "appId": "com.devinmobile.app",
+  "appName": "Devin Mobile",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "backgroundColor": "#0d1117",
+      "showSpinner": false
+    }
+  }
+}

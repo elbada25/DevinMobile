@@ -5,5 +5,38 @@ config.json
 auth_url.txt
 code_input.txt
 _test_*.json
+_test_*.py
 test_*.py
 *_test.py
+_check_*.js
+_check_cred.py
+inspect_*.py
+read_locks.py
+find_lock_holders.py
+count_sessions.py
+all_sessions.py
+
+# Packaging artifacts
+dist/
+build/
+*.spec.bak
+packaging/android/www/
+packaging/android/node_modules/
+packaging/android/android/.gradle/
+packaging/android/android/app/build/
+packaging/android/android/capacitor-cordova-android-plugins/build/
+packaging/android/android/local.properties
+packaging/windows/Output/
+packaging/linux/*.deb
+DevinMobile.apk
+
+# Logs
+logs/
+*.log
+
+# Temp
+_*.png
+_*.txt
+_*.sh
+_*.py
+

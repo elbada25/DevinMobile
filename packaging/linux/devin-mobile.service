@@ -1,0 +1,19 @@
+[Unit]
+Description=Devin Mobile Dashboard
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=devin
+Group=devin
+WorkingDirectory=/opt/devin-mobile
+ExecStart=/opt/devin-mobile/venv/bin/python /opt/devin-mobile/server.py
+Environment=DEVIN_MOBILE_PORT=8787
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
