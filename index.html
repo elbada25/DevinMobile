@@ -161,6 +161,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .modal .pc-list-item .pc-info .u{font-size:11px;color:var(--muted)}
 .modal .pc-list-item button{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
 <body>
 <div id="app">
@@ -1119,7 +1120,7 @@ $('archivedBtn').addEventListener('click',()=>{
 });
 
 // --- Auto-update from GitHub releases ---
-const APP_VERSION='1.4.0';
+const APP_VERSION='1.4.1';
 const GITHUB_REPO='elbada25/DevinMobile';
 async function checkForUpdates(){
   try{
@@ -1199,11 +1200,10 @@ $('loginDevinBtn').addEventListener('click',showDevinLoginDialog);
 
 async function showDevinLoginDialog(){
   const body=$('modalBody');
-  // Primero verificar el estado de auth del primer PC
   const pc=pcs[0];
   if(!pc||!pc.url){showToast('Configura un PC primero','error');return;}
   body.innerHTML=`<div style="text-align:center;padding:20px">
-    <p style="font-size:14px;margin-bottom:12px">Verificando estado de autenticacion...</p>
+    <p style="font-size:14px;margin-bottom:12px">Verificando estado...</p>
     <div class="spinner" style="margin:0 auto"></div>
   </div>`;
   $('modalTitle').textContent='Login Devin';
@@ -1222,21 +1222,31 @@ async function showDevinLoginDialog(){
       $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
       return;
     }
-    // No autenticado — iniciar login silencioso
+    // No autenticado — iniciar login y mostrar QR
     body.innerHTML=`<div style="text-align:center;padding:20px">
-      <p style="font-size:14px;margin-bottom:12px">Iniciando login silencioso...</p>
+      <p style="font-size:14px;margin-bottom:12px">Generando QR de login...</p>
       <div class="spinner" style="margin:0 auto"></div>
     </div>`;
     const r2=await fetch(pc.url+'/api/auth/start-login',{method:'POST',headers:authHeaders(pc.id)});
     const data2=await r2.json();
     if(data2.ok&&data2.url){
-      // Mostrar URL y campo para pegar el token
+      // Generar QR con libreria que soporta URLs largas
+      let qrHtml='';
+      try{
+        if(typeof qrcode!=='undefined'){
+          const qr=qrcode(0,'M');
+          qr.addData(data2.url);
+          qr.make();
+          qrHtml=qr.createTableTag(3);
+        }
+      }catch(e){qrHtml='';}
       body.innerHTML=`<div>
-        <p style="font-size:13px;margin-bottom:10px">Abre esta URL en cualquier navegador (movil u otro PC), inicia sesion y copia el codigo/token que te da:</p>
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;font-family:monospace;word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText('${data2.url}');showToast('URL copiada','success')">${esc(data2.url)}</div>
+        <p style="font-size:13px;margin-bottom:10px">Escanea el QR con otro dispositivo o abre la URL, inicia sesion en Devin y pega el codigo:</p>
+        ${qrHtml?`<div style="display:flex;justify-content:center;background:#fff;border-radius:8px;padding:12px;margin-bottom:12px">${qrHtml}</div>`:''}
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;font-size:10px;font-family:monospace;word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText('${data2.url}');showToast('URL copiada','success')">${esc(data2.url)}</div>
         <button type="button" onclick="window.open('${data2.url}','_blank')" style="width:100%;padding:10px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer;font-size:13px;margin-bottom:12px">Abrir URL</button>
-        <label>Pega el codigo/token aqui:</label>
-        <input id="devinLoginToken" type="text" placeholder="Codigo de verificacion" style="width:100%">
+        <label>Pega el codigo aqui:</label>
+        <input id="devinLoginToken" type="text" placeholder="Codigo de verificacion" style="width:100%;font-size:16px" autocomplete="off">
       </div>`;
       $('modalActions').style.display='flex';
       $('modalOk').textContent='Enviar';

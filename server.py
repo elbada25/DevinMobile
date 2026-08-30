@@ -1318,24 +1318,125 @@ async def api_login_state(authorization: str | None = Header(None)):
     _check_auth(authorization)
     return {"state": _auth_login_state, "url": _auth_login_url, "message": _auth_login_message}
 
-# --- Pagina web de login con QR ---
+# --- Endpoints sin auth para la pagina /login local ---
+@app.post("/api/auth/start-login-noauth")
+async def api_start_login_noauth():
+    """Inicia login sin auth del bridge — para la pagina /login local."""
+    global _auth_login_proc, _auth_login_url, _auth_login_state, _auth_login_message
+    with _auth_login_lock:
+        if _auth_login_proc and _auth_login_proc.poll() is None:
+            try:
+                _auth_login_proc.terminate()
+                _auth_login_proc.wait(timeout=3)
+            except Exception:
+                pass
+            _auth_login_proc = None
+        _auth_login_state = "waiting"
+        _auth_login_message = ""
+        try:
+            _auth_login_proc = subprocess.Popen(
+                [DEVIN_EXE, "auth", "login", "--force-manual-token-flow"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                env=_clean_env(), cwd=WORKDIR,
+                text=True, encoding="utf-8", errors="replace", bufsize=1,
+                creationflags=0x08000000 if os.name == "nt" else 0,
+            )
+            url = None
+            start = time.time()
+            while time.time() - start < 15:
+                line = _auth_login_proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if "http" in line:
+                    m = re.search(r'(https?://[^\s]+)', line)
+                    if m:
+                        url = m.group(1)
+                        break
+            if url:
+                _auth_login_url = url
+                return {"ok": True, "url": url}
+            _auth_login_state = "error"
+            _auth_login_message = "No se pudo obtener URL de login"
+            return {"ok": False, "error": _auth_login_message}
+        except Exception as e:
+            _auth_login_state = "error"
+            _auth_login_message = str(e)[:200]
+            return {"ok": False, "error": str(e)[:200]}
+
+@app.post("/api/auth/submit-token-noauth")
+async def api_submit_token_noauth(request: Request):
+    """Envia el token sin auth del bridge — para la pagina /login local."""
+    global _auth_login_state, _auth_login_message
+    body = await request.json()
+    token = (body or {}).get("token", "").strip()
+    if not token:
+        return {"ok": False, "error": "token vacio"}
+    with _auth_login_lock:
+        if not _auth_login_proc or _auth_login_proc.poll() is not None:
+            return {"ok": False, "error": "No hay proceso de login activo. Inicia login primero."}
+        try:
+            _auth_login_proc.stdin.write(token + "\n")
+            _auth_login_proc.stdin.flush()
+            start = time.time()
+            while time.time() - start < 20:
+                line = _auth_login_proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if "logged in" in line.lower() or "success" in line.lower() or "credentials" in line.lower():
+                    _auth_login_state = "success"
+                    _auth_login_message = "Login exitoso"
+                    return {"ok": True, "message": "Login exitoso"}
+                if "error" in line.lower() or "invalid" in line.lower() or "fail" in line.lower():
+                    _auth_login_state = "error"
+                    _auth_login_message = line[:200]
+                    return {"ok": False, "error": line[:200]}
+            rc = _auth_login_proc.poll()
+            if rc == 0:
+                _auth_login_state = "success"
+                _auth_login_message = "Login exitoso"
+                return {"ok": True, "message": "Login exitoso"}
+            _auth_login_state = "error"
+            _auth_login_message = f"Proceso termino con codigo {rc}"
+            return {"ok": False, "error": _auth_login_message}
+        except Exception as e:
+            _auth_login_state = "error"
+            _auth_login_message = str(e)[:200]
+            return {"ok": False, "error": str(e)[:200]}
+
+@app.get("/api/auth/status-noauth")
+async def api_auth_status_noauth():
+    """Verifica si Devin CLI esta autenticado — sin auth del bridge."""
+    try:
+        r = subprocess.run([DEVIN_EXE, "auth", "status"], capture_output=True,
+                          text=True, timeout=10, env=_clean_env())
+        output = r.stdout + r.stderr
+        logged_in = "logged in" in output.lower() and "not logged in" not in output.lower()
+        return {"ok": True, "logged_in": logged_in, "detail": output[:500]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+# --- Pagina web de login con QR (sin auth, es local) ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
-    """Pagina web local para hacer login de Devin CLI escaneando un QR."""
+    """Pagina web local para hacer login de Devin CLI escaneando un QR.
+    No requiere auth del bridge — se asume que ya tienes acceso al PC."""
     return """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Devin CLI Login</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;padding:20px;max-width:600px;margin:0 auto}
 h1{font-size:20px;margin-bottom:16px}
 .card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:16px}
 #qr{display:flex;justify-content:center;padding:20px;background:#fff;border-radius:8px;margin:16px 0}
-#qr img,#qr canvas{max-width:280px}
+#qr table{border-width:0;border-collapse:collapse}
+#qr td{border-width:0;padding:0}
 input{width:100%;padding:12px;font-size:16px;border:1px solid #30363d;border-radius:8px;background:#0d1117;color:#c9d1d9;margin:8px 0}
 button{width:100%;padding:12px;font-size:16px;border:none;border-radius:8px;background:#1f6feb;color:#fff;cursor:pointer;margin-top:8px}
 button:disabled{opacity:.5}
@@ -1359,14 +1460,16 @@ a{color:#58a6ff}
   <div id="statusBox"></div>
 </div>
 <script>
-let authHeader = 'Basic ' + btoa(prompt('Usuario:', '') + ':' + prompt('Contrasena:', ''));
 async function startLogin(){
   try{
-    const r = await fetch('/api/auth/start-login', {method:'POST', headers:{'Authorization':authHeader}});
+    const r = await fetch('/api/auth/start-login-noauth', {method:'POST'});
     const data = await r.json();
     if(data.ok && data.url){
-      document.getElementById('qr').innerHTML = '';
-      new QRCode(document.getElementById('qr'), {text: data.url, width: 280, height: 280});
+      // Generar QR con qrcode-generator (soporta URLs largas)
+      const qr = qrcode(0, 'M');
+      qr.addData(data.url);
+      qr.make();
+      document.getElementById('qr').innerHTML = qr.createTableTag(4);
       const urlBox = document.getElementById('urlBox');
       urlBox.innerHTML = '<a href="' + data.url + '" target="_blank">' + data.url + '</a>';
       urlBox.style.display = 'block';
@@ -1382,7 +1485,7 @@ async function submitCode(){
   if(!code){showStatus('error', 'Introduce el codigo');return;}
   document.getElementById('submitBtn').disabled = true;
   try{
-    const r = await fetch('/api/auth/submit-token', {method:'POST', headers:{'Authorization':authHeader, 'Content-Type':'application/json'}, body:JSON.stringify({token:code})});
+    const r = await fetch('/api/auth/submit-token-noauth', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:code})});
     const data = await r.json();
     if(data.ok){
       showStatus('success', 'Login exitoso! Ya puedes cerrar esta pagina.');
