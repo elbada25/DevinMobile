@@ -472,7 +472,7 @@ def _read_api_key() -> tuple[str, str]:
 class ACPClient:
     """Cliente ACP que lanza devin acp y se comunica via JSON-RPC sobre stdio."""
 
-    def __init__(self):
+    def __init__(self, model: str = ""):
         self.proc = None
         self._id = 0
         self._queue = None
@@ -480,12 +480,16 @@ class ACPClient:
         self._notifications = []
         self._lock = threading.Lock()
         self._authenticated = False
+        self._model = model
 
     def start(self):
         self._queue = queue_mod.Queue()
         env = _clean_env()
+        cmd = [DEVIN_EXE, "acp"]
+        if self._model:
+            cmd += ["--model", self._model]
         self.proc = subprocess.Popen(
-            [DEVIN_EXE, "acp"],
+            cmd,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             env=env, cwd=WORKDIR,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
@@ -662,7 +666,7 @@ class SessionRegistry:
         self._sessions: dict[str, SessionContext] = {}
         self._lock = threading.Lock()
 
-    def get_or_create(self, session_id: str) -> SessionContext:
+    def get_or_create(self, session_id: str, model: str = "") -> SessionContext:
         with self._lock:
             ctx = self._sessions.get(session_id)
             if ctx and ctx.client.is_alive():
@@ -674,7 +678,7 @@ class SessionRegistry:
                     pass
                 del self._sessions[session_id]
             # Crear nuevo cliente ACP
-            client = ACPClient()
+            client = ACPClient(model=model)
             client.start()
             ctx = SessionContext(session_id, client)
             self._sessions[session_id] = ctx
@@ -874,8 +878,9 @@ async def api_new_session(request: Request, authorization: str | None = Header(N
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt vacio")
     cwd = (body or {}).get("cwd", "").strip() or WORKDIR
+    model = (body or {}).get("model", "").strip()
     try:
-        ctx = _registry.get_or_create("__new__")
+        ctx = _registry.get_or_create("__new__", model=model)
         client = ctx.client
         # Crear sesion SIN prompt — el prompt se enviara via stream
         # Esto mantiene el proceso ACP vivo
@@ -1165,6 +1170,109 @@ async def api_version():
     """Version del server para auto-update. No requiere auth."""
     return {"version": APP_VERSION, "name": "devin-mobile",
             "hostname": os.environ.get("COMPUTERNAME", "unknown")}
+
+# --- Modelos disponibles ---
+AVAILABLE_MODELS = [
+    {"id": "", "name": "Por defecto"},
+    {"id": "opus", "name": "Claude Opus"},
+    {"id": "sonnet", "name": "Claude Sonnet"},
+    {"id": "haiku", "name": "Claude Haiku"},
+    {"id": "gpt-5", "name": "GPT-5"},
+    {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro"},
+    {"id": "devin", "name": "Devin (auto)"},
+]
+
+@app.get("/api/models")
+async def api_models(authorization: str | None = Header(None)):
+    _check_auth(authorization)
+    return {"models": AVAILABLE_MODELS}
+
+# --- Login silencioso ---
+_auth_login_proc = None
+_auth_login_lock = threading.Lock()
+
+@app.post("/api/auth/start-login")
+async def api_start_login(authorization: str | None = Header(None)):
+    """Inicia devin auth login --force-manual-token-flow y captura la URL."""
+    global _auth_login_proc
+    _check_auth(authorization)
+    with _auth_login_lock:
+        if _auth_login_proc and _auth_login_proc.poll() is None:
+            _auth_login_proc.terminate()
+            _auth_login_proc = None
+        try:
+            _auth_login_proc = subprocess.Popen(
+                [DEVIN_EXE, "auth", "login", "--force-manual-token-flow"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                env=_clean_env(), cwd=WORKDIR,
+                text=True, encoding="utf-8", errors="replace", bufsize=1,
+            )
+            # Leer salida hasta encontrar la URL
+            url = None
+            start = time.time()
+            while time.time() - start < 15:
+                line = _auth_login_proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if "http" in line:
+                    # Extraer URL
+                    import re as _re
+                    m = _re.search(r'(https?://[^\s]+)', line)
+                    if m:
+                        url = m.group(1)
+                        break
+            if url:
+                return {"ok": True, "url": url}
+            return {"ok": False, "error": "No se pudo obtener URL de login"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:200]}
+
+@app.post("/api/auth/submit-token")
+async def api_submit_token(request: Request, authorization: str | None = Header(None)):
+    """Envia el token/code al proceso de login."""
+    global _auth_login_proc
+    _check_auth(authorization)
+    body = await request.json()
+    token = (body or {}).get("token", "").strip()
+    if not token:
+        return {"ok": False, "error": "token vacio"}
+    with _auth_login_lock:
+        if not _auth_login_proc or _auth_login_proc.poll() is not None:
+            return {"ok": False, "error": "No hay proceso de login activo"}
+        try:
+            _auth_login_proc.stdin.write(token + "\n")
+            _auth_login_proc.stdin.flush()
+            # Esperar respuesta
+            start = time.time()
+            while time.time() - start < 15:
+                line = _auth_login_proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if "logged in" in line.lower() or "success" in line.lower():
+                    return {"ok": True, "message": "Login exitoso"}
+                if "error" in line.lower() or "invalid" in line.lower():
+                    return {"ok": False, "error": line[:200]}
+            # Si el proceso termino sin error, asumir exito
+            if _auth_login_proc.poll() == 0:
+                return {"ok": True, "message": "Login exitoso"}
+            return {"ok": False, "error": "Respuesta no confirmada"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:200]}
+
+@app.get("/api/auth/status")
+async def api_auth_status(authorization: str | None = Header(None)):
+    """Verifica si Devin CLI esta autenticado."""
+    _check_auth(authorization)
+    try:
+        r = subprocess.run([DEVIN_EXE, "auth", "status"], capture_output=True,
+                          text=True, timeout=10, env=_clean_env())
+        output = r.stdout + r.stderr
+        logged_in = "logged in" in output.lower() and "not logged in" not in output.lower()
+        return {"ok": True, "logged_in": logged_in, "detail": output[:500]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
 
 @app.get("/api/pairing")
 async def api_pairing(authorization: str | None = Header(None)):

@@ -185,6 +185,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
   <button class="btn" id="refreshBtn">Actualizar</button>
   <button class="btn" id="pcConfigBtn">PCs</button>
   <button class="btn" id="pairingBtn">Emparejar</button>
+  <button class="btn" id="loginDevinBtn">Login Devin</button>
   <button class="btn" id="logoutBtn">Salir</button>
 </div>
 <div class="view-list" id="sessionListView" style="display:none">
@@ -637,6 +638,16 @@ async function showNewSessionDialog(){
   body.innerHTML=`
     <label>PC</label>
     <select id="newSessPc">${pcs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+    <label>Modelo</label>
+    <select id="newSessModel">
+      <option value="">Por defecto</option>
+      <option value="opus">Claude Opus</option>
+      <option value="sonnet">Claude Sonnet</option>
+      <option value="haiku">Claude Haiku</option>
+      <option value="gpt-5">GPT-5</option>
+      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+      <option value="devin">Devin (auto)</option>
+    </select>
     <label>Directorio de trabajo</label>
     <div style="display:flex;gap:6px">
       <input id="newSessDir" type="text" placeholder="ej: C:\\Users\\Tu\\Proyecto" style="flex:1">
@@ -651,11 +662,12 @@ async function showNewSessionDialog(){
     const pcId=$('newSessPc').value;
     const cwd=$('newSessDir').value.trim();
     const prompt=$('newSessPrompt').value.trim();
+    const model=$('newSessModel').value;
     if(!prompt){showToast('Prompt vacio','error');return;}
     $('modalOverlay').classList.remove('show');
     const pc=getPc(pcId);
     try{
-      const r=await fetch(pc.url+'/api/sessions/new',{method:'POST',headers:authHeaders(pcId),body:JSON.stringify({prompt,cwd})});
+      const r=await fetch(pc.url+'/api/sessions/new',{method:'POST',headers:authHeaders(pcId),body:JSON.stringify({prompt,cwd,model})});
       const data=await r.json();
       if(data.ok&&data.session_id){
         openChat(pcId,data.session_id,data.title||'Nueva sesion');
@@ -1108,7 +1120,7 @@ $('archivedBtn').addEventListener('click',()=>{
 });
 
 // --- Auto-update from GitHub releases ---
-const APP_VERSION='1.2.0';
+const APP_VERSION='1.3.0';
 const GITHUB_REPO='elbada25/DevinMobile';
 async function checkForUpdates(){
   try{
@@ -1181,6 +1193,87 @@ function showUpdateModal(version,notes,downloadUrl){
   $('modalCancel').textContent='Mas tarde';
   $('modalCancel').onclick=()=>$('modalOverlay').classList.remove('show');
   $('modalOverlay').classList.add('show');
+}
+
+// --- Silent Devin login ---
+$('loginDevinBtn').addEventListener('click',showDevinLoginDialog);
+
+async function showDevinLoginDialog(){
+  const body=$('modalBody');
+  // Primero verificar el estado de auth del primer PC
+  const pc=pcs[0];
+  if(!pc||!pc.url){showToast('Configura un PC primero','error');return;}
+  body.innerHTML=`<div style="text-align:center;padding:20px">
+    <p style="font-size:14px;margin-bottom:12px">Verificando estado de autenticacion...</p>
+    <div class="spinner" style="margin:0 auto"></div>
+  </div>`;
+  $('modalTitle').textContent='Login Devin';
+  $('modalActions').style.display='none';
+  $('modalOverlay').classList.add('show');
+  try{
+    const r=await fetch(pc.url+'/api/auth/status',{headers:authHeaders(pc.id)});
+    const data=await r.json();
+    if(data.logged_in){
+      body.innerHTML=`<div style="text-align:center;padding:20px">
+        <p style="font-size:14px;color:var(--green);margin-bottom:8px">Devin CLI esta autenticado</p>
+        <p style="font-size:12px;color:var(--muted)">${esc(data.detail||'')}</p>
+      </div>`;
+      $('modalActions').style.display='flex';
+      $('modalOk').textContent='Cerrar';
+      $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
+      return;
+    }
+    // No autenticado — iniciar login silencioso
+    body.innerHTML=`<div style="text-align:center;padding:20px">
+      <p style="font-size:14px;margin-bottom:12px">Iniciando login silencioso...</p>
+      <div class="spinner" style="margin:0 auto"></div>
+    </div>`;
+    const r2=await fetch(pc.url+'/api/auth/start-login',{method:'POST',headers:authHeaders(pc.id)});
+    const data2=await r2.json();
+    if(data2.ok&&data2.url){
+      // Mostrar URL y campo para pegar el token
+      body.innerHTML=`<div>
+        <p style="font-size:13px;margin-bottom:10px">Abre esta URL en cualquier navegador (movil u otro PC), inicia sesion y copia el codigo/token que te da:</p>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;font-family:monospace;word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText('${data2.url}');showToast('URL copiada','success')">${esc(data2.url)}</div>
+        <button type="button" onclick="window.open('${data2.url}','_blank')" style="width:100%;padding:10px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer;font-size:13px;margin-bottom:12px">Abrir URL</button>
+        <label>Pega el codigo/token aqui:</label>
+        <input id="devinLoginToken" type="text" placeholder="Codigo de verificacion" style="width:100%">
+      </div>`;
+      $('modalActions').style.display='flex';
+      $('modalOk').textContent='Enviar';
+      $('modalOk').onclick=async()=>{
+        const token=$('devinLoginToken').value.trim();
+        if(!token){showToast('Introduce el codigo','error');return;}
+        $('modalOk').disabled=true;
+        try{
+          const r3=await fetch(pc.url+'/api/auth/submit-token',{method:'POST',headers:authHeaders(pc.id),body:JSON.stringify({token})});
+          const data3=await r3.json();
+          if(data3.ok){
+            showToast('Login exitoso','success');
+            $('modalOverlay').classList.remove('show');
+          }else{
+            showToast('Error: '+(data3.error||''),'error');
+            $('modalOk').disabled=false;
+          }
+        }catch(e){showToast('Error de conexion','error');$('modalOk').disabled=false;}
+      };
+    }else{
+      body.innerHTML=`<div style="text-align:center;padding:20px">
+        <p style="font-size:14px;color:var(--red);margin-bottom:8px">No se pudo iniciar login</p>
+        <p style="font-size:12px;color:var(--muted)">${esc(data2.error||'')}</p>
+      </div>`;
+      $('modalActions').style.display='flex';
+      $('modalOk').textContent='Cerrar';
+      $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
+    }
+  }catch(e){
+    body.innerHTML=`<div style="text-align:center;padding:20px">
+      <p style="font-size:14px;color:var(--red)">Error de conexion</p>
+    </div>`;
+    $('modalActions').style.display='flex';
+    $('modalOk').textContent='Cerrar';
+    $('modalOk').onclick=()=>$('modalOverlay').classList.remove('show');
+  }
 }
 
 // --- Init ---
