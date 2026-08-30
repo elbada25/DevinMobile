@@ -532,25 +532,10 @@ class ACPClient:
                 self._authenticated = True
         else:
             # Newer CLI (v3000+): only supports devin-browser auth.
-            # Intentar authenticate con devin-browser y timeout corto.
-            # Si el CLI ya tiene credenciales stored, puede responder sin abrir navegador.
-            # Si no responde en 5s, asumimos que está autenticado (session/list funciona sin auth).
-            try:
-                auth_resp = self._request("authenticate", {
-                    "methodId": "devin-browser",
-                    "meta": {},
-                }, timeout=5)
-                if "error" not in auth_resp:
-                    self._authenticated = True
-                    print("  ACP authenticate: OK (devin-browser)", flush=True)
-                else:
-                    print(f"  ACP authenticate warning: {auth_resp.get('error', '')}", flush=True)
-                    self._authenticated = True
-            except Exception as e:
-                # Timeout — el navegador se abrió o no hay respuesta
-                # Proceder sin auth (session/list funciona sin autenticar)
-                print(f"  ACP authenticate: timeout, procediendo sin auth", flush=True)
-                self._authenticated = True
+            # NO llamar authenticate — abre el navegador.
+            # session/list y session/new funcionan sin autenticar si el CLI
+            # tiene credenciales stored válidas.
+            self._authenticated = True
         return resp
 
     def _next_id(self):
@@ -969,17 +954,22 @@ async def api_stream(session_id: str, request: Request,
 
             # 3. Cargar la sesión si es necesaria
             # Si la sesión fue creada por este ACP client (is_newly_created), no recargar
+            # Solo hacer session/load si vamos a enviar un prompt (no solo leer historial)
             is_new = getattr(ctx, "is_newly_created", False)
-            if not is_new and ctx.status == "idle" and ctx.event_id == 0:
+            if not is_new and ctx.status == "idle" and ctx.event_id == 0 and prompt:
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Cargando sesion...'})}\n\n"
-                load_resp = client.load_session(session_id)
-                if "error" in load_resp:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'No se pudo cargar: ' + str(load_resp.get('error', ''))[:200]})}\n\n"
+                try:
+                    load_resp = client.load_session(session_id)
+                    if "error" in load_resp:
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'No se pudo cargar: ' + str(load_resp.get('error', ''))[:200]})}\n\n"
+                        return
+                    # Drenar notificaciones de replay — NO reenviar al SSE
+                    # El historial viene de la DB, no del replay
+                    client.drain_notifications()
+                    ctx.client._authenticated = True
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Error al cargar sesion: ' + str(e)[:200]})}\n\n"
                     return
-                # Drenar notificaciones de replay — NO reenviar al SSE
-                # El historial viene de la DB, no del replay
-                client.drain_notifications()
-                ctx.client._authenticated = True
 
             # 4. Si hay eventos perdidos (Last-Event-ID), reenviarlos del ring buffer
             if last_eid > 0:

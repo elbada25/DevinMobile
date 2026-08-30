@@ -965,7 +965,8 @@ async function startStream(text,force){
   $('chatStopBtn').style.display='none';
   $('chatSendBtn').disabled=false;
   indicator.classList.remove('show');
-  setTimeout(()=>{if(currentSessionId)loadHistory(currentPcId,currentSessionId);},2000);
+  // No recargar historial despues del stream — los mensajes ya se renderizaron via stream
+  // Recargar causaria duplicados
 }
 
 function handleStreamEvent(evt,respId,state){
@@ -1138,13 +1139,44 @@ function showUpdateModal(version,notes,downloadUrl){
     <p style="font-size:14px;margin-bottom:8px">Hay una nueva version disponible: <strong>${esc(version)}</strong></p>
     <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Tu version actual: ${APP_VERSION}</p>
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap">${esc(notes)}</div>
+    <div id="updateProgress" style="display:none;margin-top:10px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Descargando actualizacion...</div>
+      <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+        <div id="updateProgressBar" style="background:var(--accent);height:100%;width:0%;transition:width .3s"></div>
+      </div>
+    </div>
   </div>`;
   $('modalTitle').textContent='Actualizacion disponible';
   $('modalActions').style.display='flex';
-  $('modalOk').textContent='Descargar APK';
-  $('modalOk').onclick=()=>{
-    window.open(downloadUrl,'_blank');
-    $('modalOverlay').classList.remove('show');
+  $('modalOk').textContent='Actualizar';
+  $('modalOk').onclick=async()=>{
+    $('modalOk').disabled=true;
+    $('modalCancel').disabled=true;
+    $('updateProgress').style.display='block';
+    $('updateProgressBar').style.width='50%';
+    try{
+      if(isCapacitor()&&window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ApkInstaller){
+        const result=await Capacitor.Plugins.ApkInstaller.downloadAndInstall({url:downloadUrl});
+        if(result&&result.ok){
+          $('updateProgressBar').style.width='100%';
+          // Android mostrara el dialogo de instalacion
+          // La app se reiniciara despues de instalar
+        }else{
+          showToast('Error al instalar: '+(result&&result.error||''),'error');
+          $('modalOk').disabled=false;
+          $('modalCancel').disabled=false;
+        }
+      }else{
+        // Fallback: abrir en navegador (web o sin plugin)
+        $('updateProgressBar').style.width='100%';
+        window.open(downloadUrl,'_blank');
+        $('modalOverlay').classList.remove('show');
+      }
+    }catch(e){
+      showToast('Error: '+e.message,'error');
+      $('modalOk').disabled=false;
+      $('modalCancel').disabled=false;
+    }
   };
   $('modalCancel').textContent='Mas tarde';
   $('modalCancel').onclick=()=>$('modalOverlay').classList.remove('show');
