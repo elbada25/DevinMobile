@@ -175,6 +175,10 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
   <input id="passInput" type="password" placeholder="Contrasena" autocomplete="off" inputmode="text" enterkeyhint="go">
   <button id="loginBtn">Entrar</button>
   <div class="err" id="loginErr"></div>
+  <div style="margin-top:20px;text-align:center">
+    <button id="scanPairingBtn" style="width:100%;padding:12px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer;font-size:14px">Escanear QR para vincular PC</button>
+  </div>
+  <div id="loginQrReader" style="display:none;border-radius:10px;overflow:hidden;margin-top:12px"></div>
 </div>
 
 <div class="conn-status" id="connStatus"></div>
@@ -354,6 +358,84 @@ $('loginBtn').addEventListener('click',async()=>{
 });
 $('passInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click();});
 $('userInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('passInput').focus();});
+
+// --- Escanear QR para vincular PC desde la pantalla de login ---
+let _loginQrScanner=null;
+$('scanPairingBtn').addEventListener('click',async()=>{
+  const btn=$('scanPairingBtn');
+  const readerEl=$('loginQrReader');
+  if(_loginQrScanner){
+    try{_loginQrScanner.stop();}catch(e){}
+    _loginQrScanner=null;
+    readerEl.innerHTML='';
+    readerEl.style.display='none';
+    btn.textContent='Escanear QR para vincular PC';
+    return;
+  }
+  btn.disabled=true;
+  btn.textContent='Iniciando camara...';
+  readerEl.style.display='block';
+  try{
+    if(typeof Html5Qrcode==='undefined'){
+      $('loginErr').textContent='Libreria QR no disponible';
+      btn.disabled=false;
+      btn.textContent='Escanear QR para vincular PC';
+      readerEl.style.display='none';
+      return;
+    }
+    _loginQrScanner=new Html5Qrcode('loginQrReader');
+    await _loginQrScanner.start(
+      {facingMode:'environment'},
+      {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0},
+      (decodedText)=>{
+        // QR escaneado — contiene JSON con info de emparejamiento
+        try{
+          _loginQrScanner.stop();
+        }catch(e){}
+        _loginQrScanner=null;
+        readerEl.innerHTML='';
+        readerEl.style.display='none';
+        btn.textContent='QR escaneado!';
+        const data=JSON.parse(decodedText);
+        if(data.t==='devinmobile'){
+          // Auto-configurar PC
+          const url=(data.u||[]).find(u=>!u.includes('localhost'))||data.u[0]||'';
+          if(!url){$('loginErr').textContent='QR sin URL valida';return;}
+          const name=data.n||'Mi PC';
+          const user=data.user||'';
+          const pass=data.pass||'';
+          // Actualizar o crear el primer PC
+          let pc=pcs[0]||{id:'pc'+Date.now()};
+          pc.name=name;
+          pc.url=url.replace(/\/$/,'');
+          if(user&&pass)pc.credB64=btoa(user+':'+pass);
+          if(!pcs.length)pcs.push(pc);
+          savePcs();
+          // Rellenar campos
+          if(isCapacitor()){$('loginUrlInput').value=pc.url;$('loginUrlInput').style.display='block';}
+          $('userInput').value=user;
+          $('passInput').value=pass;
+          $('loginErr').textContent='';
+          // Intentar login automatico
+          showToast('PC vinculado: '+name,'success');
+          $('loginBtn').click();
+        }else{
+          $('loginErr').textContent='QR no valido para DevinMobile';
+          btn.disabled=false;
+          btn.textContent='Escanear QR para vincular PC';
+        }
+      },
+      (err)=>{}
+    );
+    btn.disabled=false;
+    btn.textContent='Escaneando... (apunta al QR del PC)';
+  }catch(e){
+    $('loginErr').textContent='Error camara: '+e.message;
+    btn.disabled=false;
+    btn.textContent='Escanear QR para vincular PC';
+    readerEl.style.display='none';
+  }
+});
 
 $('logoutBtn').addEventListener('click',()=>{
   localStorage.removeItem(CRED_KEY);
@@ -1121,7 +1203,7 @@ $('archivedBtn').addEventListener('click',()=>{
 });
 
 // --- Auto-update from GitHub releases ---
-const APP_VERSION='1.5.0';
+const APP_VERSION='1.5.1';
 const GITHUB_REPO='elbada25/DevinMobile';
 async function checkForUpdates(){
   try{

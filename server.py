@@ -1449,9 +1449,15 @@ a{color:#58a6ff}
 </style>
 </head>
 <body>
-<h1>Devin CLI - Login</h1>
+<h1>Devin Mobile - Configuracion</h1>
 <div class="card">
-  <p style="margin-bottom:12px">Escanea el QR con tu movil para abrir la URL de login de Devin, o abrela manualmente:</p>
+  <h2 style="font-size:16px;margin-bottom:10px">1. Vincular movil</h2>
+  <p style="margin-bottom:12px;font-size:13px;color:#8b949e">Escanea este QR desde la app del movil (boton "Escanear QR para vincular PC") para auto-configurar la conexion:</p>
+  <div id="pairQr" style="display:flex;justify-content:center;padding:20px;background:#fff;border-radius:8px;margin:16px 0"><p style="color:#666">Generando...</p></div>
+</div>
+<div class="card">
+  <h2 style="font-size:16px;margin-bottom:10px">2. Login de Devin CLI</h2>
+  <p style="margin-bottom:12px">Si Devin CLI no esta autenticado, escanea este QR o abre la URL para iniciar sesion:</p>
   <div id="qr"><p style="color:#666">Iniciando...</p></div>
   <div id="urlBox" class="url" style="display:none"></div>
   <p style="font-size:13px;color:#8b949e;margin:12px 0">Despues de iniciar sesion en Devin, copia el codigo que aparece y pegalo abajo:</p>
@@ -1460,12 +1466,25 @@ a{color:#58a6ff}
   <div id="statusBox"></div>
 </div>
 <script>
+// QR de emparejamiento (compacto, cabe en QR)
+async function loadPairing(){
+  try{
+    const r = await fetch('/api/pairing-noauth');
+    const data = await r.json();
+    const text = JSON.stringify(data);
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    document.getElementById('pairQr').innerHTML = qr.createTableTag(4);
+  }catch(e){
+    document.getElementById('pairQr').innerHTML = '<p style="color:#f85149">Error: ' + e.message + '</p>';
+  }
+}
 async function startLogin(){
   try{
     const r = await fetch('/api/auth/start-login-noauth', {method:'POST'});
     const data = await r.json();
     if(data.ok && data.url){
-      // Generar QR con qrcode-generator (soporta URLs largas)
       const qr = qrcode(0, 'M');
       qr.addData(data.url);
       qr.make();
@@ -1499,6 +1518,7 @@ function showStatus(type, msg){
   const el = document.getElementById('statusBox');
   el.innerHTML = '<div class="status ' + type + '">' + msg + '</div>';
 }
+loadPairing();
 startLogin();
 </script>
 </body>
@@ -1528,6 +1548,30 @@ async def api_pairing(authorization: str | None = Header(None)):
         "username": AUTH_USERNAME,
         "version": APP_VERSION,
         "hostname": hostname,
+    }
+    return JSONResponse(pairing)
+
+@app.get("/api/pairing-noauth")
+async def api_pairing_noauth():
+    """Genera info de emparejamiento sin auth — para la pagina /login local.
+    El QR contiene URL + usuario + contraseña para auto-configurar el movil."""
+    urls = [f"http://localhost:{PORT}"]
+    try:
+        result = subprocess.run(["tailscale", "ip", "-4"],
+                                capture_output=True, text=True, timeout=5)
+        for ip in result.stdout.strip().split("\n"):
+            if ip:
+                urls.append(f"http://{ip}:{PORT}")
+    except Exception:
+        pass
+    hostname = os.environ.get("COMPUTERNAME", os.environ.get("HOSTNAME", "unknown"))
+    # Formato compacto para QR: JSON con todo lo necesario
+    pairing = {
+        "t": "devinmobile",  # tipo
+        "n": f"Devin - {hostname}",
+        "u": urls,
+        "user": AUTH_USERNAME,
+        "pass": AUTH_PASSWORD,
     }
     return JSONResponse(pairing)
 
