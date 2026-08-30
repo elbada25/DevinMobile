@@ -125,9 +125,9 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 @keyframes spin{to{transform:rotate(360deg)}}
 
 .chat-input{background:var(--card);border-top:1px solid var(--border);padding:10px 14px;display:flex;gap:8px;flex-shrink:0;padding-bottom:max(10px,env(safe-area-inset-bottom))}
-.chat-input textarea{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;font-family:inherit;resize:none;outline:none;min-height:40px;max-height:120px}
+.chat-input textarea{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:16px;font-family:inherit;resize:none;outline:none;min-height:44px;max-height:120px;line-height:1.4;-webkit-appearance:none;appearance:none}
 .chat-input textarea:focus{border-color:var(--accent)}
-.chat-input button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;align-self:flex-end}
+.chat-input button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px 16px;font-size:14px;font-weight:500;cursor:pointer;align-self:flex-end;min-height:44px}
 .chat-input button:disabled{opacity:.4}
 .chat-input .stop-btn{background:var(--red);align-self:flex-end}
 .chat-input .stop-btn:active{opacity:.7}
@@ -209,7 +209,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
     <span id="streamingText">Devin esta trabajando...</span>
   </div>
   <div class="chat-input">
-    <textarea id="chatInput" placeholder="Escribe un mensaje..." rows="1" enterkeyhint="send" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
+    <textarea id="chatInput" placeholder="Escribe un mensaje..." rows="1" autocapitalize="off" autocomplete="off" spellcheck="false" style="font-size:16px"></textarea>
     <button id="chatSendBtn">Enviar</button>
     <button id="chatStopBtn" class="stop-btn" style="display:none">Detener</button>
   </div>
@@ -883,9 +883,8 @@ $('chatReleaseBtn').addEventListener('click',async()=>{
 
 // --- Send prompt ---
 $('chatSendBtn').addEventListener('click',sendPrompt);
-$('chatInput').addEventListener('keydown',e=>{
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendPrompt();}
-});
+// No interceptar Enter — dejar que el teclado Android funcione normalmente
+// El usuario pulsa el boton Enviar para enviar
 
 async function sendPrompt(){
   const text=$('chatInput').value.trim();
@@ -1120,7 +1119,7 @@ $('archivedBtn').addEventListener('click',()=>{
 });
 
 // --- Auto-update from GitHub releases ---
-const APP_VERSION='1.3.1';
+const APP_VERSION='1.4.0';
 const GITHUB_REPO='elbada25/DevinMobile';
 async function checkForUpdates(){
   try{
@@ -1303,16 +1302,26 @@ function handleAndroidBack(){
 // Registrar listener del boton atras de Android
 async function setupBackButton(){
   try{
-    if(typeof window.Capacitor==='undefined')return;
-    // Capacitor 6: @capacitor/app se auto-registra
+    if(typeof window.Capacitor==='undefined'){
+      console.log('Capacitor no disponible (web mode)');
+      return;
+    }
+    // Intentar multiples metodos de acceso al plugin App
+    let AppPlugin=null;
     if(Capacitor.Plugins&&Capacitor.Plugins.App){
-      await Capacitor.Plugins.App.addListener('backButton',({canGoBack})=>{
+      AppPlugin=Capacitor.Plugins.App;
+    }
+    // Registrar listener
+    if(AppPlugin){
+      await AppPlugin.addListener('backButton',({canGoBack})=>{
         handleAndroidBack();
       });
-      console.log('BackButton listener registrado via Capacitor App plugin');
+      console.log('BackButton listener registrado');
+    }else{
+      console.warn('Plugin App no encontrado en Capacitor.Plugins');
     }
   }catch(e){
-    console.warn('No se pudo registrar backButton listener:',e);
+    console.warn('Error registrando backButton:',e);
   }
 }
 

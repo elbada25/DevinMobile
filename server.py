@@ -885,10 +885,19 @@ async def api_new_session(request: Request, authorization: str | None = Header(N
         # Crear sesion SIN prompt — el prompt se enviara via stream
         # Esto mantiene el proceso ACP vivo
         resp = client.new_session("", cwd=cwd)
+        # Verificar si hay error de auth
+        if "error" in resp:
+            err = resp.get("error", "")
+            err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            _registry.remove("__new__")
+            if "auth" in err_msg.lower() or "authenticate" in err_msg.lower():
+                return {"ok": False, "error": "Devin CLI no esta autenticado. Ve a Login Devin para iniciar sesion.", "auth_required": True}
+            return {"ok": False, "error": f"ACP error: {err_msg[:200]}"}
         result = resp.get("result", {})
         sid = result.get("sessionId")
         if not sid:
-            return {"ok": False, "error": "no sessionId in response"}
+            _registry.remove("__new__")
+            return {"ok": False, "error": "No se recibio sessionId. Posiblemente Devin CLI no esta autenticado. Ve a Login Devin."}
         # Drenar notificaciones iniciales del session/new
         client.drain_notifications()
         # Mover el contexto al session_id real SIN parar el ACP process
@@ -966,7 +975,12 @@ async def api_stream(session_id: str, request: Request,
                 try:
                     load_resp = client.load_session(session_id)
                     if "error" in load_resp:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'No se pudo cargar: ' + str(load_resp.get('error', ''))[:200]})}\n\n"
+                        err = load_resp.get("error", "")
+                        err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                        if "auth" in err_msg.lower() or "authenticate" in err_msg.lower():
+                            yield f"data: {json.dumps({'type': 'error', 'message': 'Devin CLI no esta autenticado. Ve a Login Devin para iniciar sesion.'})}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'type': 'error', 'message': 'No se pudo cargar: ' + str(err_msg)[:200]})}\n\n"
                         return
                     # Drenar notificaciones de replay — NO reenviar al SSE
                     # El historial viene de la DB, no del replay
@@ -1187,25 +1201,35 @@ async def api_models(authorization: str | None = Header(None)):
     _check_auth(authorization)
     return {"models": AVAILABLE_MODELS}
 
-# --- Login silencioso ---
+# --- Login silencioso via QR ---
 _auth_login_proc = None
 _auth_login_lock = threading.Lock()
+_auth_login_url = None
+_auth_login_state = "idle"  # idle, waiting, success, error
+_auth_login_message = ""
 
 @app.post("/api/auth/start-login")
 async def api_start_login(authorization: str | None = Header(None)):
     """Inicia devin auth login --force-manual-token-flow y captura la URL."""
-    global _auth_login_proc
+    global _auth_login_proc, _auth_login_url, _auth_login_state, _auth_login_message
     _check_auth(authorization)
     with _auth_login_lock:
         if _auth_login_proc and _auth_login_proc.poll() is None:
-            _auth_login_proc.terminate()
+            try:
+                _auth_login_proc.terminate()
+                _auth_login_proc.wait(timeout=3)
+            except Exception:
+                pass
             _auth_login_proc = None
+        _auth_login_state = "waiting"
+        _auth_login_message = ""
         try:
             _auth_login_proc = subprocess.Popen(
                 [DEVIN_EXE, "auth", "login", "--force-manual-token-flow"],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 env=_clean_env(), cwd=WORKDIR,
                 text=True, encoding="utf-8", errors="replace", bufsize=1,
+                creationflags=0x08000000 if os.name == "nt" else 0,
             )
             # Leer salida hasta encontrar la URL
             url = None
@@ -1216,22 +1240,25 @@ async def api_start_login(authorization: str | None = Header(None)):
                     break
                 line = line.strip()
                 if "http" in line:
-                    # Extraer URL
-                    import re as _re
-                    m = _re.search(r'(https?://[^\s]+)', line)
+                    m = re.search(r'(https?://[^\s]+)', line)
                     if m:
                         url = m.group(1)
                         break
             if url:
+                _auth_login_url = url
                 return {"ok": True, "url": url}
-            return {"ok": False, "error": "No se pudo obtener URL de login"}
+            _auth_login_state = "error"
+            _auth_login_message = "No se pudo obtener URL de login"
+            return {"ok": False, "error": _auth_login_message}
         except Exception as e:
+            _auth_login_state = "error"
+            _auth_login_message = str(e)[:200]
             return {"ok": False, "error": str(e)[:200]}
 
 @app.post("/api/auth/submit-token")
 async def api_submit_token(request: Request, authorization: str | None = Header(None)):
     """Envia el token/code al proceso de login."""
-    global _auth_login_proc
+    global _auth_login_state, _auth_login_message
     _check_auth(authorization)
     body = await request.json()
     token = (body or {}).get("token", "").strip()
@@ -1239,26 +1266,37 @@ async def api_submit_token(request: Request, authorization: str | None = Header(
         return {"ok": False, "error": "token vacio"}
     with _auth_login_lock:
         if not _auth_login_proc or _auth_login_proc.poll() is not None:
-            return {"ok": False, "error": "No hay proceso de login activo"}
+            return {"ok": False, "error": "No hay proceso de login activo. Inicia login primero."}
         try:
             _auth_login_proc.stdin.write(token + "\n")
             _auth_login_proc.stdin.flush()
             # Esperar respuesta
             start = time.time()
-            while time.time() - start < 15:
+            while time.time() - start < 20:
                 line = _auth_login_proc.stdout.readline()
                 if not line:
                     break
                 line = line.strip()
-                if "logged in" in line.lower() or "success" in line.lower():
+                if "logged in" in line.lower() or "success" in line.lower() or "credentials" in line.lower():
+                    _auth_login_state = "success"
+                    _auth_login_message = "Login exitoso"
                     return {"ok": True, "message": "Login exitoso"}
-                if "error" in line.lower() or "invalid" in line.lower():
+                if "error" in line.lower() or "invalid" in line.lower() or "fail" in line.lower():
+                    _auth_login_state = "error"
+                    _auth_login_message = line[:200]
                     return {"ok": False, "error": line[:200]}
-            # Si el proceso termino sin error, asumir exito
-            if _auth_login_proc.poll() == 0:
+            # Si el proceso termino
+            rc = _auth_login_proc.poll()
+            if rc == 0:
+                _auth_login_state = "success"
+                _auth_login_message = "Login exitoso"
                 return {"ok": True, "message": "Login exitoso"}
-            return {"ok": False, "error": "Respuesta no confirmada"}
+            _auth_login_state = "error"
+            _auth_login_message = f"Proceso termino con codigo {rc}"
+            return {"ok": False, "error": _auth_login_message}
         except Exception as e:
+            _auth_login_state = "error"
+            _auth_login_message = str(e)[:200]
             return {"ok": False, "error": str(e)[:200]}
 
 @app.get("/api/auth/status")
@@ -1273,6 +1311,95 @@ async def api_auth_status(authorization: str | None = Header(None)):
         return {"ok": True, "logged_in": logged_in, "detail": output[:500]}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
+
+@app.get("/api/auth/login-state")
+async def api_login_state(authorization: str | None = Header(None)):
+    """Devuelve el estado actual del proceso de login."""
+    _check_auth(authorization)
+    return {"state": _auth_login_state, "url": _auth_login_url, "message": _auth_login_message}
+
+# --- Pagina web de login con QR ---
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    """Pagina web local para hacer login de Devin CLI escaneando un QR."""
+    return """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Devin CLI Login</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;padding:20px;max-width:600px;margin:0 auto}
+h1{font-size:20px;margin-bottom:16px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:16px}
+#qr{display:flex;justify-content:center;padding:20px;background:#fff;border-radius:8px;margin:16px 0}
+#qr img,#qr canvas{max-width:280px}
+input{width:100%;padding:12px;font-size:16px;border:1px solid #30363d;border-radius:8px;background:#0d1117;color:#c9d1d9;margin:8px 0}
+button{width:100%;padding:12px;font-size:16px;border:none;border-radius:8px;background:#1f6feb;color:#fff;cursor:pointer;margin-top:8px}
+button:disabled{opacity:.5}
+.status{padding:12px;border-radius:8px;margin:8px 0;font-size:14px}
+.status.success{background:#0d2818;color:#3fb950;border:1px solid #238636}
+.status.error{background:#2d1517;color:#f85149;border:1px solid #da3633}
+.status.waiting{background:#1c1e26;color:#d29922;border:1px solid #9e6a03}
+.url{word-break:break-all;font-size:11px;font-family:monospace;background:#0d1117;padding:8px;border-radius:6px;margin:8px 0}
+a{color:#58a6ff}
+</style>
+</head>
+<body>
+<h1>Devin CLI - Login</h1>
+<div class="card">
+  <p style="margin-bottom:12px">Escanea el QR con tu movil para abrir la URL de login de Devin, o abrela manualmente:</p>
+  <div id="qr"><p style="color:#666">Iniciando...</p></div>
+  <div id="urlBox" class="url" style="display:none"></div>
+  <p style="font-size:13px;color:#8b949e;margin:12px 0">Despues de iniciar sesion en Devin, copia el codigo que aparece y pegalo abajo:</p>
+  <input id="codeInput" type="text" placeholder="Pega el codigo aqui" autocomplete="off">
+  <button id="submitBtn" onclick="submitCode()" disabled>Enviar codigo</button>
+  <div id="statusBox"></div>
+</div>
+<script>
+let authHeader = 'Basic ' + btoa(prompt('Usuario:', '') + ':' + prompt('Contrasena:', ''));
+async function startLogin(){
+  try{
+    const r = await fetch('/api/auth/start-login', {method:'POST', headers:{'Authorization':authHeader}});
+    const data = await r.json();
+    if(data.ok && data.url){
+      document.getElementById('qr').innerHTML = '';
+      new QRCode(document.getElementById('qr'), {text: data.url, width: 280, height: 280});
+      const urlBox = document.getElementById('urlBox');
+      urlBox.innerHTML = '<a href="' + data.url + '" target="_blank">' + data.url + '</a>';
+      urlBox.style.display = 'block';
+      document.getElementById('submitBtn').disabled = false;
+      showStatus('waiting', 'Esperando codigo...');
+    }else{
+      showStatus('error', 'Error: ' + (data.error || 'desconocido'));
+    }
+  }catch(e){showStatus('error', 'Error: ' + e.message);}
+}
+async function submitCode(){
+  const code = document.getElementById('codeInput').value.trim();
+  if(!code){showStatus('error', 'Introduce el codigo');return;}
+  document.getElementById('submitBtn').disabled = true;
+  try{
+    const r = await fetch('/api/auth/submit-token', {method:'POST', headers:{'Authorization':authHeader, 'Content-Type':'application/json'}, body:JSON.stringify({token:code})});
+    const data = await r.json();
+    if(data.ok){
+      showStatus('success', 'Login exitoso! Ya puedes cerrar esta pagina.');
+    }else{
+      showStatus('error', 'Error: ' + (data.error || ''));
+      document.getElementById('submitBtn').disabled = false;
+    }
+  }catch(e){showStatus('error', 'Error: ' + e.message);document.getElementById('submitBtn').disabled = false;}
+}
+function showStatus(type, msg){
+  const el = document.getElementById('statusBox');
+  el.innerHTML = '<div class="status ' + type + '">' + msg + '</div>';
+}
+startLogin();
+</script>
+</body>
+</html>"""
 
 @app.get("/api/pairing")
 async def api_pairing(authorization: str | None = Header(None)):
