@@ -178,7 +178,8 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
   <div style="margin-top:20px;text-align:center">
     <button id="scanPairingBtn" style="width:100%;padding:12px;border:1px solid var(--accent);border-radius:8px;background:rgba(31,111,235,.1);color:var(--accent);cursor:pointer;font-size:14px">Escanear QR para vincular PC</button>
   </div>
-  <div id="loginQrReader" style="display:none;border-radius:10px;overflow:hidden;margin-top:12px"></div>
+  <div id="loginQrReader" style="display:none;width:100%;max-width:350px;aspect-ratio:1;margin:12px auto;border-radius:10px;overflow:hidden;background:#000"></div>
+  <div id="loginQrStatus" style="display:none;text-align:center;font-size:12px;padding:8px;margin-top:4px"></div>
 </div>
 
 <div class="conn-status" id="connStatus"></div>
@@ -361,79 +362,120 @@ $('userInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('passInput').
 
 // --- Escanear QR para vincular PC desde la pantalla de login ---
 let _loginQrScanner=null;
+function setQrStatus(msg,color){
+  const el=$('loginQrStatus');
+  if(!el)return;
+  el.style.display='block';
+  el.textContent=msg;
+  el.style.color=color||'var(--muted)';
+}
+function stopLoginQrScanner(){
+  if(_loginQrScanner){
+    try{_loginQrScanner.stop();}catch(e){}
+    try{_loginQrScanner.clear();}catch(e){}
+    _loginQrScanner=null;
+  }
+  const el=$('loginQrReader');
+  if(el){el.innerHTML='';el.style.display='none';}
+  const st=$('loginQrStatus');
+  if(st)st.style.display='none';
+}
 $('scanPairingBtn').addEventListener('click',async()=>{
   const btn=$('scanPairingBtn');
   const readerEl=$('loginQrReader');
   if(_loginQrScanner){
-    try{_loginQrScanner.stop();}catch(e){}
-    _loginQrScanner=null;
-    readerEl.innerHTML='';
-    readerEl.style.display='none';
+    stopLoginQrScanner();
     btn.textContent='Escanear QR para vincular PC';
     return;
   }
   btn.disabled=true;
   btn.textContent='Iniciando camara...';
   readerEl.style.display='block';
+  readerEl.style.width='100%';
+  readerEl.style.maxWidth='350px';
+  readerEl.style.margin='12px auto';
+  readerEl.style.background='#000';
+  readerEl.style.aspectRatio='1';
+  readerEl.style.borderRadius='10px';
+  readerEl.style.overflow='hidden';
+  setQrStatus('Solicitando acceso a la camara...','var(--muted)');
   try{
     if(typeof Html5Qrcode==='undefined'){
-      $('loginErr').textContent='Libreria QR no disponible';
+      setQrStatus('ERROR: Libreria html5-qrcode no cargada. Revisa tu conexion.','var(--red)');
       btn.disabled=false;
       btn.textContent='Escanear QR para vincular PC';
       readerEl.style.display='none';
       return;
     }
-    _loginQrScanner=new Html5Qrcode('loginQrReader');
+    // Crear el scanner
+    _loginQrScanner=new Html5Qrcode('loginQrReader',{
+      verbose:false,
+      useBarCodeDetectorIfSupported:true,
+    });
+    setQrStatus('Camara activa. Apunta al QR del PC.','var(--green)');
     await _loginQrScanner.start(
       {facingMode:'environment'},
-      {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0},
+      {
+        fps:10,
+        qrbox:{width:220,height:220},
+        aspectRatio:1.0,
+      },
       (decodedText)=>{
-        // QR escaneado — contiene JSON con info de emparejamiento
-        try{
-          _loginQrScanner.stop();
-        }catch(e){}
-        _loginQrScanner=null;
-        readerEl.innerHTML='';
-        readerEl.style.display='none';
+        // QR escaneado!
+        setQrStatus('QR detectado! Procesando...','var(--green)');
+        stopLoginQrScanner();
         btn.textContent='QR escaneado!';
-        const data=JSON.parse(decodedText);
-        if(data.t==='devinmobile'){
-          // Auto-configurar PC
-          const url=(data.u||[]).find(u=>!u.includes('localhost'))||data.u[0]||'';
-          if(!url){$('loginErr').textContent='QR sin URL valida';return;}
-          const name=data.n||'Mi PC';
-          const user=data.user||'';
-          const pass=data.pass||'';
-          // Actualizar o crear el primer PC
-          let pc=pcs[0]||{id:'pc'+Date.now()};
-          pc.name=name;
-          pc.url=url.replace(/\/$/,'');
-          if(user&&pass)pc.credB64=btoa(user+':'+pass);
-          if(!pcs.length)pcs.push(pc);
-          savePcs();
-          // Rellenar campos
-          if(isCapacitor()){$('loginUrlInput').value=pc.url;$('loginUrlInput').style.display='block';}
-          $('userInput').value=user;
-          $('passInput').value=pass;
-          $('loginErr').textContent='';
-          // Intentar login automatico
-          showToast('PC vinculado: '+name,'success');
-          $('loginBtn').click();
-        }else{
-          $('loginErr').textContent='QR no valido para DevinMobile';
+        try{
+          const data=JSON.parse(decodedText);
+          if(data.t==='devinmobile'){
+            const url=(data.u||[]).find(u=>!u.includes('localhost'))||data.u[0]||'';
+            if(!url){setQrStatus('Error: QR sin URL valida','var(--red)');btn.disabled=false;btn.textContent='Escanear QR para vincular PC';return;}
+            const name=data.n||'Mi PC';
+            const user=data.user||'';
+            const pass=data.pass||'';
+            let pc=pcs[0]||{id:'pc'+Date.now()};
+            pc.name=name;
+            pc.url=url.replace(/\/$/,'');
+            if(user&&pass)pc.credB64=btoa(user+':'+pass);
+            if(!pcs.length)pcs.push(pc);
+            savePcs();
+            if(isCapacitor()){$('loginUrlInput').value=pc.url;$('loginUrlInput').style.display='block';}
+            $('userInput').value=user;
+            $('passInput').value=pass;
+            $('loginErr').textContent='';
+            setQrStatus('Vinculado: '+name+'. Entrando...','var(--green)');
+            $('loginBtn').click();
+          }else{
+            setQrStatus('Error: QR no es de DevinMobile','var(--red)');
+            btn.disabled=false;
+            btn.textContent='Escanear QR para vincular PC';
+          }
+        }catch(parseErr){
+          // El QR no es JSON — quizas es una URL o texto plano
+          setQrStatus('QR leido: '+decodedText.substring(0,50),'var(--muted)');
           btn.disabled=false;
           btn.textContent='Escanear QR para vincular PC';
         }
       },
-      (err)=>{}
+      (err)=>{
+        // Error de escaneo continuo — no mostrar (es normal mientras busca)
+      }
     );
     btn.disabled=false;
-    btn.textContent='Escaneando... (apunta al QR del PC)';
+    btn.textContent='Escaneando... (toca para cancelar)';
   }catch(e){
-    $('loginErr').textContent='Error camara: '+e.message;
+    let errMsg=e.message||String(e);
+    if(errMsg.includes('Permission')||errMsg.includes('denied')||errMsg.includes('NotAllowed')){
+      setQrStatus('Error: Permiso de camara denegado. Ve a Ajustes > Apps > DevinMobile > Permisos > Camara.','var(--red)');
+    }else if(errMsg.includes('NotFound')||errMsg.includes('device')||errMsg.includes('camera')){
+      setQrStatus('Error: No se encontro camara. '+errMsg.substring(0,100),'var(--red)');
+    }else{
+      setQrStatus('Error: '+errMsg.substring(0,150),'var(--red)');
+    }
     btn.disabled=false;
     btn.textContent='Escanear QR para vincular PC';
     readerEl.style.display='none';
+    _loginQrScanner=null;
   }
 });
 
@@ -1203,7 +1245,7 @@ $('archivedBtn').addEventListener('click',()=>{
 });
 
 // --- Auto-update from GitHub releases ---
-const APP_VERSION='1.5.1';
+const APP_VERSION='1.5.2';
 const GITHUB_REPO='elbada25/DevinMobile';
 async function checkForUpdates(){
   try{
